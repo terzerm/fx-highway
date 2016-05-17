@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<sbe:messageSchema xmlns:sbe="http://fixprotocol.io/sbe/rc4"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.w3schools.com/RedsDevils ../../../build/fpl/SimpleBinary1-0.xsd"
+                   package="org.tools4j.fx.highway.message"
+                   id="1"
+                   version="0"
+                   semanticVersion="5.2"
+                   description="FX Highway Messages"
+                   byteOrder="littleEndian">
+    <types>
+        <composite name="groupSizeEncoding" description="Repeating group dimensions">
+            <type name="blockLength" primitiveType="uint8"/>
+            <type name="numInGroup" primitiveType="uint8"/>
+        </composite>
+        <composite name="messageHeader" description="Message identifiers and length of message root">
+            <type name="blockLength" primitiveType="uint16"/>
+            <type name="templateId" primitiveType="uint16"/>
+            <type name="schemaId" primitiveType="uint16"/>
+            <type name="version" primitiveType="uint16"/>
+        </composite>
+        <enum name="BooleanType" encodingType="uint8">
+            <validValue name="FALSE">0</validValue>
+            <validValue name="TRUE">1</validValue>
+        </enum>
+        <enum name="SideType" encodingType="char">
+            <validValue name="BID">b</validValue>
+            <validValue name="ASK">a</validValue>
+        </enum>
+        <type name="TimestampType" primitiveType="int64"/>
+        <type name="CurrencyType" primitiveType="char" length="3" characterEncoding="ASCII"/>
+        <type name="CurrencyPairType" primitiveType="char" length="6" characterEncoding="ASCII"/>
+        <type name="RateType" primitiveType="double"/>
+        <type name="QuantityType" primitiveType="double"/>
+        <type name="VenueType" primitiveType="char" length="3"/>
+    </types>
+    <sbe:message name="MarketDataSnapshot" id="1">
+        <field name="triggerTimestamp" id="1" type="TimestampType"/>
+        <field name="eventTimestamp" id="2" type="TimestampType"/>
+        <field name="currencyPair" id="3" type="CurrencyPairType"/>
+        <field name="venue" id="4" type="VenueType"/>
+        <group name="bids" id="5" dimensionType="groupSizeEncoding">
+            <field name="quantity" id="6" type="QuantityType"/>
+            <field name="rate" id="7" type="RateType"/>
+        </group>
+        <group name="asks" id="8" dimensionType="groupSizeEncoding">
+            <field name="quantity" id="9" type="QuantityType"/>
+            <field name="rate" id="10" type="RateType"/>
+        </group>
+    </sbe:message>
+</sbe:messageSchema>

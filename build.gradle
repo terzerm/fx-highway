@@ -1,0 +1,118 @@
+apply plugin: 'java'
+apply plugin: 'jacoco'
+apply plugin: 'license'
+
+sourceCompatibility = 1.8
+group = "org.tools4j"
+version = '1.0.1-SNAPSHOT'
+archivesBaseName = "fx-highway"
+
+jar {
+    manifest {
+        attributes 'Implementation-Title': 'fx-highway', 'Implementation-Version': version
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+buildscript {
+	repositories {
+		mavenCentral()
+		jcenter()
+	}
+	
+	dependencies {
+		classpath 'nl.javadude.gradle.plugins:license-gradle-plugin:0.11.0'
+		classpath "io.codearte.gradle.nexus:gradle-nexus-staging-plugin:0.5.3"
+	}
+}
+
+dependencies {
+	compile 'uk.co.real-logic:sbe-all:1.4.0-RC4'
+    testCompile 'junit:junit:4.11'
+	testCompile 'pl.pragmatists:JUnitParams:1.0.4'
+}
+
+task extractXsd(type: Copy) {
+    print 'extracting ' + configurations.compile.find({it.name.matches('sbe-all-.*.jar')})
+    from zipTree(configurations.compile.find({it.name.matches('sbe-all-.*.jar')}))
+    include 'fpl/**.xsd'
+    into buildDir
+}
+task sbeTool(type: JavaExec, dependsOn: extractXsd) {
+    main = 'uk.co.real_logic.sbe.SbeTool'
+    classpath = sourceSets.main.compileClasspath
+    systemProperties = [
+            'sbe.validation.xsd':   "$buildDir/fpl/SimpleBinary1-0.xsd",
+            'sbe.output.dir':       "$buildDir/generated-src"
+    ]
+    args 'src/main/resources/fx-highway.xml'
+}
+
+processResources.dependsOn extractXsd,sbeTool
+
+test {
+	//supported system properties for test sets:
+	//
+	//-DtestVariant=TINY,SMALL,STANDARD,ALL
+	//-DtestCases=TINY,SMALL,STANDARD,ALL
+	//-DtestScales=TINY,SMALL,STANDARD,ALL
+    systemProperties = System.getProperties()
+}
+
+uploadArchives {
+    repositories {
+       flatDir {
+           dirs 'build/repositories'
+       }
+    }
+}
+
+task copyLicense(type: Copy) {
+    from('.')
+    into('build/resources/main/')
+    include('LICENSE.md')
+    rename('LICENSE.md', 'LICENSE.txt')
+}
+task copyLicenseToSrc(type: Copy) {
+    from('build/resources/main/')
+    into('build/generated-src/')
+    include('LICENSE.txt')
+}
+
+license {
+    header rootProject.file('src/main/resources/LICENSE.template')
+    strictCheck true
+	include "**/*.java"
+	ext.year = Calendar.getInstance().get(Calendar.YEAR)
+}
+
+copyLicense.dependsOn processResources
+copyLicenseToSrc.dependsOn copyLicense
+compileJava.dependsOn licenseFormat,copyLicense,copyLicenseToSrc
+
+javadoc {
+	options.showFromPackage()
+	options.linkSource()
+	options.links("http://docs.oracle.com/javase/8/docs/api/");
+	options.windowTitle = "fx-highway API ${version}"
+	options.overview = "src/main/java/overview.html";
+}
+
+task javadocJar(type: Jar) {
+    classifier = 'javadoc'
+    from javadoc
+}
+
+task sourcesJar(type: Jar) {
+    classifier = 'sources'
+    from sourceSets.main.allSource
+}
+
+artifacts {
+    archives jar
+    archives javadocJar
+    archives sourcesJar
+}
