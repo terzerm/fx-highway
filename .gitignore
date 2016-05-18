@@ -6,3 +6,4 @@
 /build
 jmh-benchmarks
 .idea
+*.iml
