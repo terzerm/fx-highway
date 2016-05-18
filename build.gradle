@@ -1,12 +1,18 @@
 apply plugin: 'java'
 apply plugin: 'idea'
-apply plugin: 'jacoco'
 apply plugin: 'license'
 
 sourceCompatibility = 1.8
 group = "org.tools4j"
 version = '1.0.1-SNAPSHOT'
 archivesBaseName = "fx-highway"
+
+idea {
+    module {
+        downloadJavadoc = true
+        downloadSources = true
+    }
+}
 
 jar {
     manifest {
@@ -43,19 +49,19 @@ task extractXsd(type: Copy) {
     include 'fpl/**.xsd'
     into buildDir
 }
+
+def generatedSrc = "$buildDir/generated-src"
+
 task sbeTool(type: JavaExec, dependsOn: extractXsd) {
     main = 'uk.co.real_logic.sbe.SbeTool'
     classpath = sourceSets.main.compileClasspath
     systemProperties = [
             'sbe.validation.xsd':   "$buildDir/fpl/SimpleBinary1-0.xsd",
-            'sbe.output.dir':       "$buildDir/generated-src"
+            'sbe.output.dir':       generatedSrc
     ]
     args 'src/main/resources/fx-highway.xml'
 }
 
-sourceSets.main.java.srcDir 'build/generated-src'
-
-idea.module.sourceDirs += file("build/generated-src")
 
 processResources.dependsOn extractXsd,sbeTool
 
@@ -76,6 +82,14 @@ uploadArchives {
     }
 }
 
+sourceSets {
+    main {
+        java {
+            srcDir generatedSrc
+        }
+    }
+}
+
 task copyLicense(type: Copy) {
     from('.')
     into('build/resources/main/')
@@ -84,7 +98,7 @@ task copyLicense(type: Copy) {
 }
 task copyLicenseToSrc(type: Copy) {
     from('build/resources/main/')
-    into('build/generated-src/')
+    into(generatedSrc)
     include('LICENSE.txt')
 }
 
@@ -99,20 +113,18 @@ copyLicense.dependsOn processResources
 copyLicenseToSrc.dependsOn copyLicense
 compileJava.dependsOn licenseFormat,copyLicense,copyLicenseToSrc
 
-//TODO: fix me, had issues with compiling generated sources
-//javadoc {
-//	options.showFromPackage()
-//	options.linkSource()
-//	options.links("http://docs.oracle.com/javase/8/docs/api/");
-//	options.windowTitle = "fx-highway API ${version}"
-//	options.overview = "src/main/java/overview.html";
-//}
+javadoc {
+	options.showFromPackage()
+	options.linkSource()
+	options.links("http://docs.oracle.com/javase/8/docs/api/");
+	options.windowTitle = "fx-highway API ${version}"
+	options.overview = "src/main/java/overview.html";
+}
 
-//TODO: fix me, had issues with compiling generated sources
-//task javadocJar(type: Jar) {
-//    classifier = 'javadoc'
-//    from javadoc
-//}
+task javadocJar(type: Jar) {
+    classifier = 'javadoc'
+    from javadoc
+}
 
 task sourcesJar(type: Jar) {
     classifier = 'sources'
@@ -121,7 +133,6 @@ task sourcesJar(type: Jar) {
 
 artifacts {
     archives jar
-    //TODO: fix me, had issues with compiling generated sources
-    //archives javadocJar
+    archives javadocJar
     archives sourcesJar
 }
