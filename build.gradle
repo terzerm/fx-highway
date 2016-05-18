@@ -1,11 +1,18 @@
 apply plugin: 'java'
-apply plugin: 'jacoco'
+apply plugin: 'idea'
 apply plugin: 'license'
 
 sourceCompatibility = 1.8
 group = "org.tools4j"
 version = '1.0.1-SNAPSHOT'
 archivesBaseName = "fx-highway"
+
+idea {
+    module {
+        downloadJavadoc = true
+        downloadSources = true
+    }
+}
 
 jar {
     manifest {
@@ -41,12 +48,15 @@ task extractXsd(type: Copy) {
     include 'fpl/**.xsd'
     into buildDir
 }
+
+def generatedSrc = "$buildDir/generated-src"
+
 task sbeTool(type: JavaExec, dependsOn: extractXsd) {
     main = 'uk.co.real_logic.sbe.SbeTool'
     classpath = sourceSets.main.compileClasspath
     systemProperties = [
             'sbe.validation.xsd':   "$buildDir/fpl/SimpleBinary1-0.xsd",
-            'sbe.output.dir':       "$buildDir/generated-src"
+            'sbe.output.dir':       generatedSrc
     ]
     args 'src/main/resources/fx-highway.xml'
 }
@@ -70,6 +80,14 @@ uploadArchives {
     }
 }
 
+sourceSets {
+    main {
+        java {
+            srcDir generatedSrc
+        }
+    }
+}
+
 task copyLicense(type: Copy) {
     from('.')
     into('build/resources/main/')
@@ -78,7 +96,7 @@ task copyLicense(type: Copy) {
 }
 task copyLicenseToSrc(type: Copy) {
     from('build/resources/main/')
-    into('build/generated-src/')
+    into(generatedSrc)
     include('LICENSE.txt')
 }
 
