@@ -1,4 +1,5 @@
 apply plugin: 'java'
+apply plugin: 'idea'
 apply plugin: 'jacoco'
 apply plugin: 'license'
 
@@ -31,6 +32,7 @@ buildscript {
 
 dependencies {
 	compile 'uk.co.real-logic:sbe-all:1.4.0-RC4'
+    compile 'com.google.guava:guava:19.0'
     testCompile 'junit:junit:4.11'
 	testCompile 'pl.pragmatists:JUnitParams:1.0.4'
 }
@@ -50,6 +52,10 @@ task sbeTool(type: JavaExec, dependsOn: extractXsd) {
     ]
     args 'src/main/resources/fx-highway.xml'
 }
+
+sourceSets.main.java.srcDir 'build/generated-src'
+
+idea.module.sourceDirs += file("build/generated-src")
 
 processResources.dependsOn extractXsd,sbeTool
 
@@ -93,18 +99,20 @@ copyLicense.dependsOn processResources
 copyLicenseToSrc.dependsOn copyLicense
 compileJava.dependsOn licenseFormat,copyLicense,copyLicenseToSrc
 
-javadoc {
-	options.showFromPackage()
-	options.linkSource()
-	options.links("http://docs.oracle.com/javase/8/docs/api/");
-	options.windowTitle = "fx-highway API ${version}"
-	options.overview = "src/main/java/overview.html";
-}
+//TODO: fix me, had issues with compiling generated sources
+//javadoc {
+//	options.showFromPackage()
+//	options.linkSource()
+//	options.links("http://docs.oracle.com/javase/8/docs/api/");
+//	options.windowTitle = "fx-highway API ${version}"
+//	options.overview = "src/main/java/overview.html";
+//}
 
-task javadocJar(type: Jar) {
-    classifier = 'javadoc'
-    from javadoc
-}
+//TODO: fix me, had issues with compiling generated sources
+//task javadocJar(type: Jar) {
+//    classifier = 'javadoc'
+//    from javadoc
+//}
 
 task sourcesJar(type: Jar) {
     classifier = 'sources'
@@ -113,6 +121,7 @@ task sourcesJar(type: Jar) {
 
 artifacts {
     archives jar
-    archives javadocJar
+    //TODO: fix me, had issues with compiling generated sources
+    //archives javadocJar
     archives sourcesJar
 }
