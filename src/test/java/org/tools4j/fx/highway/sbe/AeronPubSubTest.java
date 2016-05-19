@@ -27,16 +27,23 @@ import io.aeron.Aeron;
 import io.aeron.Publication;
 import io.aeron.Subscription;
 import io.aeron.driver.MediaDriver;
+import org.agrona.concurrent.NanoClock;
+import org.agrona.concurrent.SystemNanoClock;
 import org.agrona.concurrent.UnsafeBuffer;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.tools4j.fx.highway.message.MarketDataSnapshot;
 
 import java.nio.ByteBuffer;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
-import static org.hamcrest.CoreMatchers.is;
-import static org.hamcrest.MatcherAssert.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.tools4j.fx.highway.sbe.SerializerHelper.*;
 
 public class AeronPubSubTest {
@@ -64,19 +71,58 @@ public class AeronPubSubTest {
         mediaDriver.close();
     }
 
+    @Ignore
     @Test
     public void subscriptionShouldReceivePublishedSnapshot() throws Exception {
         //given
-        final ByteBuffer byteBuffer = ByteBuffer.allocateDirect(4096);
-        final UnsafeBuffer directBuffer = new UnsafeBuffer(byteBuffer);
         final MarketDataSnapshot newSnapshot = givenMarketDataSnapshot();
+        final BlockingQueue<MarketDataSnapshot> queue = new ArrayBlockingQueue<MarketDataSnapshot>(1);
+        final CountDownLatch subscriberStarted = new CountDownLatch(1);
+        final AtomicBoolean terminate = new AtomicBoolean(false);
+        final NanoClock clock = new SystemNanoClock();
 
         //when
-        encode(directBuffer, newSnapshot);
-        final MarketDataSnapshot decodedSnapshot = decode(directBuffer);
+        final Thread subscriberThread = new Thread(() -> {
+            subscriberStarted.countDown();
+            System.out.println(clock.nanoTime() + " subscriber started");
+            while (!terminate.get()) {
+                subscription.poll((buf, offset, len, header) -> {
+                    try {
+                        System.out.println(clock.nanoTime() + " poll called");
+                        final ByteBuffer byteBuffer = ByteBuffer.allocateDirect(4096);
+                        final UnsafeBuffer directBuffer = new UnsafeBuffer(byteBuffer);
+                        directBuffer.wrap(buf);
+                        final MarketDataSnapshot decoded = decode(directBuffer);
+                        queue.add(decoded);
+                    } catch (Exception e) {
+                        queue.add(null);
+                    }
+                }, 10);
+            }
+            System.out.println(clock.nanoTime() + " subscriber thread terminating");
+        });
+        subscriberThread.start();
+        if (!subscriberStarted.await(2, TimeUnit.SECONDS)) {
+            throw new RuntimeException("subscriber not started");
+        }
+        final Thread publisherThread = new Thread(() -> {
+            System.out.println(clock.nanoTime() + " publisher thread started");
+            final ByteBuffer byteBuffer = ByteBuffer.allocateDirect(4096);
+            final UnsafeBuffer directBuffer = new UnsafeBuffer(byteBuffer);
+            encode(directBuffer, newSnapshot);
+            publication.offer(directBuffer);
+            System.out.println(clock.nanoTime() + " publisher thread terminating");
+        });
+        publisherThread.start();
 
         //then
-        assertThat(decodedSnapshot, is(newSnapshot));
+        final MarketDataSnapshot decoded = queue.poll(2, TimeUnit.SECONDS);
+        terminate.set(true);
+
+        publisherThread.join();
+        subscriberThread.join();
+
+        assertThat(decoded).isEqualTo(newSnapshot);
      }
 
 }

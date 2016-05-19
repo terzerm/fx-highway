@@ -24,13 +24,12 @@
 package org.tools4j.fx.highway.sbe;
 
 import org.agrona.concurrent.UnsafeBuffer;
+import org.assertj.core.api.Assertions;
 import org.junit.Test;
 import org.tools4j.fx.highway.message.MarketDataSnapshot;
 
 import java.nio.ByteBuffer;
 
-import static org.hamcrest.CoreMatchers.is;
-import static org.hamcrest.MatcherAssert.assertThat;
 import static org.tools4j.fx.highway.sbe.SerializerHelper.*;
 
 public class SimpleSerializationTest {
@@ -44,10 +43,10 @@ public class SimpleSerializationTest {
 
         //when
         encode(directBuffer, newSnapshot);
-        final MarketDataSnapshot decodedSnapshot = decode(directBuffer);
+        final MarketDataSnapshot decoded = decode(directBuffer);
 
         //then
-        assertThat(decodedSnapshot, is(newSnapshot));
+        Assertions.assertThat(decoded).isEqualTo(newSnapshot);
     }
 
 }

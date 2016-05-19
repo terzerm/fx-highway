@@ -41,7 +41,7 @@ dependencies {
     compile 'uk.co.real-logic:sbe-all:1.4.0-RC4'
     compile 'io.aeron:aeron-all:0.9.7'
     testCompile 'junit:junit:4.11'
-	testCompile 'pl.pragmatists:JUnitParams:1.0.4'
+    testCompile 'org.assertj:assertj-core:3.4.1'
 }
 
 task extractXsd(type: Copy) {
