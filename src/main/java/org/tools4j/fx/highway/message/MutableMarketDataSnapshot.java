@@ -26,7 +26,10 @@ package org.tools4j.fx.highway.message;
 import org.tools4j.fx.highway.sbe.CurrencyPair;
 import org.tools4j.fx.highway.sbe.Venue;
 
-import java.util.*;
+import java.util.AbstractList;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
 
 public class MutableMarketDataSnapshot implements MarketDataSnapshot {
     private long triggerTimestamp;
@@ -71,7 +74,7 @@ public class MutableMarketDataSnapshot implements MarketDataSnapshot {
         for (int i = 0; i < size; i++) {
             list.add(new MutableRateLevel());
         }
-        return Collections.unmodifiableList(list);
+        return list;
     }
 
     private final MarketDataSnapshotBuilder builder = new MarketDataSnapshotBuilder() {
