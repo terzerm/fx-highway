@@ -87,7 +87,7 @@ class SerializerHelper {
 
         fromSnapshot.getAsks().forEach(a -> asksEncoder.next().quantity(a.getQuantity()).rate(a.getRate()));
 
-        return MD_SNAPSHOT_ENCODER.encodedLength();
+        return MESSAGE_HEADER_ENCODER.encodedLength() + MD_SNAPSHOT_ENCODER.encodedLength();
     }
 
 

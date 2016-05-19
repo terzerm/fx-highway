@@ -32,7 +32,6 @@ import org.agrona.concurrent.SystemNanoClock;
 import org.agrona.concurrent.UnsafeBuffer;
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.tools4j.fx.highway.message.MarketDataSnapshot;
 
@@ -61,6 +60,18 @@ public class AeronPubSubTest {
         aeron = Aeron.connect(context);
         subscription = aeron.addSubscription("udp://localhost:40123", 10);
         publication = aeron.addPublication("udp://localhost:40123", 10);
+        int cnt = 0;
+        while (!publication.isConnected()) {
+            if (cnt > 20) {
+                throw new RuntimeException("publisher not connected");
+            }
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            cnt++;
+        }
     }
 
     @After
@@ -71,7 +82,6 @@ public class AeronPubSubTest {
         mediaDriver.close();
     }
 
-    @Ignore
     @Test
     public void subscriptionShouldReceivePublishedSnapshot() throws Exception {
         //given
@@ -88,14 +98,13 @@ public class AeronPubSubTest {
             while (!terminate.get()) {
                 subscription.poll((buf, offset, len, header) -> {
                     try {
-                        System.out.println(clock.nanoTime() + " poll called");
-                        final ByteBuffer byteBuffer = ByteBuffer.allocateDirect(4096);
-                        final UnsafeBuffer directBuffer = new UnsafeBuffer(byteBuffer);
-                        directBuffer.wrap(buf);
+                        System.out.println(clock.nanoTime() + " poll called, len=" + len);
+                        final UnsafeBuffer directBuffer = new UnsafeBuffer(buf, offset, len);
                         final MarketDataSnapshot decoded = decode(directBuffer);
                         queue.add(decoded);
+                        System.out.println(clock.nanoTime() + " decoded: " + decoded);
                     } catch (Exception e) {
-                        queue.add(null);
+                        e.printStackTrace();
                     }
                 }, 10);
             }
@@ -109,8 +118,10 @@ public class AeronPubSubTest {
             System.out.println(clock.nanoTime() + " publisher thread started");
             final ByteBuffer byteBuffer = ByteBuffer.allocateDirect(4096);
             final UnsafeBuffer directBuffer = new UnsafeBuffer(byteBuffer);
-            encode(directBuffer, newSnapshot);
-            publication.offer(directBuffer);
+            final int len = encode(directBuffer, newSnapshot);
+//            publication.offer(directBuffer);
+            final long pubres = publication.offer(directBuffer, 0, len);
+            System.out.println(clock.nanoTime() + " published, res=" + pubres + ", len=" + len);
             System.out.println(clock.nanoTime() + " publisher thread terminating");
         });
         publisherThread.start();
