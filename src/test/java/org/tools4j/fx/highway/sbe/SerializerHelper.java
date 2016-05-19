@@ -38,8 +38,8 @@ class SerializerHelper {
     private static final MarketDataSnapshotEncoder MD_SNAPSHOT_ENCODER = new MarketDataSnapshotEncoder();
 
     static MarketDataSnapshot givenMarketDataSnapshot(final MarketDataSnapshotBuilder builder) {
-        final long triggerTimestamp = NANO_CLOCK.nanoTime() - 1000;
-        final long eventTimestamp = NANO_CLOCK.nanoTime();
+        final long triggerTimestamp = NANO_CLOCK.nanoTime();
+        final long eventTimestamp = triggerTimestamp;
         final CurrencyPair currencyPair = CurrencyPair.AUDUSD;
         final Venue venue = Venue.EBS;
         final double bidQuantity1 = 1000000;
@@ -92,7 +92,7 @@ class SerializerHelper {
     }
 
 
-    static MarketDataSnapshot decode(final UnsafeBuffer directBuffer, final MarketDataSnapshotBuilder builder) throws Exception {
+    static MarketDataSnapshot decode(final UnsafeBuffer directBuffer, final MarketDataSnapshotBuilder builder) {
         MESSAGE_HEADER_DECODER.wrap(directBuffer, 0);
 
         // Lookup the applicable flyweight to decode this type of message based on templateId and version.

@@ -27,6 +27,7 @@ import io.aeron.Aeron;
 import io.aeron.Publication;
 import io.aeron.Subscription;
 import io.aeron.driver.MediaDriver;
+import io.aeron.logbuffer.FragmentHandler;
 import org.HdrHistogram.Histogram;
 import org.agrona.concurrent.NanoClock;
 import org.agrona.concurrent.SystemNanoClock;
@@ -45,6 +46,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.tools4j.fx.highway.sbe.SerializerHelper.*;
@@ -157,26 +159,34 @@ public class AeronPubSubTest {
             final MutableMarketDataSnapshot marketDataSnapshot = new MutableMarketDataSnapshot();
             final UnsafeBuffer unsafeBuffer = new UnsafeBuffer(0, 0);
             final AtomicInteger count = new AtomicInteger();
-            while (!terminate.get()) {
-                subscription.poll((buf, offset, len, header) -> {
-                    try {
-                        unsafeBuffer.wrap(buf, offset, len);
-                        final MarketDataSnapshot decoded = decode(unsafeBuffer, marketDataSnapshot.builder());
-                        final long time = clock.nanoTime();
-                        if (count.incrementAndGet() >= w) {
-                            histogram.recordValue(time - decoded.getEventTimestamp());
-                        }
-                        subscriberLatch.countDown();
-                    } catch (Exception e) {
-                        throw new RuntimeException(e);
+            final AtomicLong t0 = new AtomicLong();
+            final AtomicLong t1 = new AtomicLong();
+            final FragmentHandler fh = (buf, offset, len, header) -> {
+                if (count.get() == 0) t0.set(clock.nanoTime());
+                else if (count.get() == n-1) t1.set(clock.nanoTime());
+                unsafeBuffer.wrap(buf, offset, len);
+                final MarketDataSnapshot decoded = decode(unsafeBuffer, marketDataSnapshot.builder());
+                final long time = clock.nanoTime();
+                if (count.incrementAndGet() >= w) {
+                    histogram.recordValue(time - decoded.getEventTimestamp());
+                    if (count.get() - 10 < w) {
+                        System.out.println("c " + System.nanoTime() + ": " + time + " - " + decoded.getEventTimestamp() + ":\t" + (time - decoded.getEventTimestamp())/1000.0 + " us");
                     }
-                }, 10);
+                }
+                subscriberLatch.countDown();
+            };
+            while (!terminate.get()) {
+                subscription.poll(fh, 10);
             }
+            System.out.println((t1.get() - t0.get())/1000.0 + " us total receiving time");
         });
         subscriberThread.start();
-        final Thread publisherThread = new Thread(() -> {
+
+        //publisher
+        {
             final MutableMarketDataSnapshot marketDataSnapshot = new MutableMarketDataSnapshot();
-            final UnsafeBuffer unsafeBuffer = new UnsafeBuffer(ByteBuffer.allocateDirect(4096));
+            final UnsafeBuffer unsafeBuffer = new UnsafeBuffer(ByteBuffer.allocateDirect(128));
+            final long t0 = clock.nanoTime();
             for (int i = 0; i < n && !terminate.get(); i++) {
                 final MarketDataSnapshot newSnapshot = givenMarketDataSnapshot(marketDataSnapshot.builder());
                 final int len = encode(unsafeBuffer, newSnapshot);
@@ -190,8 +200,9 @@ public class AeronPubSubTest {
                     }
                 } while (pubres < 0);
             }
-        });
-        publisherThread.start();
+            final long t1 = clock.nanoTime();
+            System.out.println((t1 - t0) / 1000.0 + " us total publishing time");
+        }
 
         //then
         if (!subscriberLatch.await(maxTimeToRunSeconds, TimeUnit.SECONDS)) {
@@ -200,7 +211,6 @@ public class AeronPubSubTest {
         }
         terminate.set(true);
 
-        publisherThread.join();
         subscriberThread.join();
 
         System.out.println("Histogram (micros):");
