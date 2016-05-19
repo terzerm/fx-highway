@@ -23,24 +23,23 @@
  */
 package org.tools4j.fx.highway.sbe;
 
-import com.google.common.collect.Lists;
+import org.agrona.concurrent.NanoClock;
+import org.agrona.concurrent.SystemNanoClock;
 import org.agrona.concurrent.UnsafeBuffer;
 import org.tools4j.fx.highway.message.MarketDataSnapshot;
-import org.tools4j.fx.highway.message.RateLevel;
-
-import java.time.Instant;
-import java.util.List;
+import org.tools4j.fx.highway.message.MarketDataSnapshotBuilder;
 
 class SerializerHelper {
 
+    private static final NanoClock NANO_CLOCK = new SystemNanoClock();
     private static final MessageHeaderDecoder MESSAGE_HEADER_DECODER = new MessageHeaderDecoder();
     private static final MessageHeaderEncoder MESSAGE_HEADER_ENCODER = new MessageHeaderEncoder();
     private static final MarketDataSnapshotDecoder MD_SNAPSHOT_DECODER = new MarketDataSnapshotDecoder();
     private static final MarketDataSnapshotEncoder MD_SNAPSHOT_ENCODER = new MarketDataSnapshotEncoder();
 
-    static MarketDataSnapshot givenMarketDataSnapshot() {
-        final long triggerTimestamp = Instant.now().toEpochMilli();
-        final long eventTimestamp = Instant.now().minusSeconds(10).toEpochMilli();
+    static MarketDataSnapshot givenMarketDataSnapshot(final MarketDataSnapshotBuilder builder) {
+        final long triggerTimestamp = NANO_CLOCK.nanoTime() - 1000;
+        final long eventTimestamp = NANO_CLOCK.nanoTime();
         final CurrencyPair currencyPair = CurrencyPair.AUDUSD;
         final Venue venue = Venue.EBS;
         final double bidQuantity1 = 1000000;
@@ -53,14 +52,16 @@ class SerializerHelper {
         final double askQuantity2 = 2000000;
         final double askRate2 = 0.7537;
 
+        builder.setTriggerTimestamp(triggerTimestamp);
+        builder.setEventTimestamp(eventTimestamp);
+        builder.setCurrencyPair(currencyPair);
+        builder.setVenue(venue);
+        builder.addBid(bidQuantity1, bidRate1);
+        builder.addBid(bidQuantity2, bidRate2);
+        builder.addAsk(askQuantity1, askRate1);
+        builder.addAsk(askQuantity2, askRate2);
 
-        return new MarketDataSnapshot(triggerTimestamp, eventTimestamp, currencyPair, venue,
-                Lists.newArrayList(
-                        new RateLevel(bidQuantity1, bidRate1),
-                        new RateLevel(bidQuantity2, bidRate2)),
-                Lists.newArrayList(
-                        new RateLevel(askQuantity1, askRate1),
-                        new RateLevel(askQuantity2, askRate2)));
+        return builder.build();
     }
 
 
@@ -91,13 +92,7 @@ class SerializerHelper {
     }
 
 
-    static MarketDataSnapshot decode(final UnsafeBuffer directBuffer) throws Exception {
-        final long triggerTimestamp;
-        final long eventTimestamp;
-        final CurrencyPair currencyPair;
-        final Venue venue;
-
-
+    static MarketDataSnapshot decode(final UnsafeBuffer directBuffer, final MarketDataSnapshotBuilder builder) throws Exception {
         MESSAGE_HEADER_DECODER.wrap(directBuffer, 0);
 
         // Lookup the applicable flyweight to decode this type of message based on templateId and version.
@@ -117,18 +112,15 @@ class SerializerHelper {
         //mdSnapshotDecoder. schemaId
         //mdSnapshotDecoder.sbeSchemaVersion();
 
-        triggerTimestamp = MD_SNAPSHOT_DECODER.triggerTimestamp();
-        eventTimestamp = MD_SNAPSHOT_DECODER.eventTimestamp();
-        currencyPair = MD_SNAPSHOT_DECODER.currencyPair();
-        venue = MD_SNAPSHOT_DECODER.venue();
+        builder.setTriggerTimestamp(MD_SNAPSHOT_DECODER.triggerTimestamp());
+        builder.setEventTimestamp(MD_SNAPSHOT_DECODER.eventTimestamp());
+        builder.setCurrencyPair(MD_SNAPSHOT_DECODER.currencyPair());
+        builder.setVenue(MD_SNAPSHOT_DECODER.venue());
 
-        List<RateLevel> bids = Lists.newArrayList();
-        List<RateLevel> asks = Lists.newArrayList();
+        MD_SNAPSHOT_DECODER.bids().forEach(bd -> builder.addBid(bd.quantity(), bd.rate()));
+        MD_SNAPSHOT_DECODER.asks().forEach(ad -> builder.addAsk(ad.quantity(), ad.rate()));
 
-        MD_SNAPSHOT_DECODER.bids().forEach(bd -> bids.add(new RateLevel(bd.quantity(), bd.rate())));
-        MD_SNAPSHOT_DECODER.asks().forEach(ad -> asks.add(new RateLevel(ad.quantity(), ad.rate())));
-
-        return new MarketDataSnapshot(triggerTimestamp, eventTimestamp, currencyPair, venue, bids, asks);
+        return builder.build();
     }
 
 }

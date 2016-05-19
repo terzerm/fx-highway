@@ -26,6 +26,7 @@ package org.tools4j.fx.highway.sbe;
 import org.agrona.concurrent.UnsafeBuffer;
 import org.assertj.core.api.Assertions;
 import org.junit.Test;
+import org.tools4j.fx.highway.message.ImmutableMarketDataSnapshot;
 import org.tools4j.fx.highway.message.MarketDataSnapshot;
 
 import java.nio.ByteBuffer;
@@ -39,11 +40,11 @@ public class SimpleSerializationTest {
         //given
         final ByteBuffer byteBuffer = ByteBuffer.allocateDirect(4096);
         final UnsafeBuffer directBuffer = new UnsafeBuffer(byteBuffer);
-        final MarketDataSnapshot newSnapshot = givenMarketDataSnapshot();
+        final MarketDataSnapshot newSnapshot = givenMarketDataSnapshot(new ImmutableMarketDataSnapshot.Builder());
 
         //when
         encode(directBuffer, newSnapshot);
-        final MarketDataSnapshot decoded = decode(directBuffer);
+        final MarketDataSnapshot decoded = decode(directBuffer, new ImmutableMarketDataSnapshot.Builder());
 
         //then
         Assertions.assertThat(decoded).isEqualTo(newSnapshot);

@@ -27,13 +27,16 @@ import io.aeron.Aeron;
 import io.aeron.Publication;
 import io.aeron.Subscription;
 import io.aeron.driver.MediaDriver;
+import org.HdrHistogram.Histogram;
 import org.agrona.concurrent.NanoClock;
 import org.agrona.concurrent.SystemNanoClock;
 import org.agrona.concurrent.UnsafeBuffer;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.tools4j.fx.highway.message.ImmutableMarketDataSnapshot;
 import org.tools4j.fx.highway.message.MarketDataSnapshot;
+import org.tools4j.fx.highway.message.MutableMarketDataSnapshot;
 
 import java.nio.ByteBuffer;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -41,6 +44,7 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.tools4j.fx.highway.sbe.SerializerHelper.*;
@@ -85,8 +89,8 @@ public class AeronPubSubTest {
     @Test
     public void subscriptionShouldReceivePublishedSnapshot() throws Exception {
         //given
-        final MarketDataSnapshot newSnapshot = givenMarketDataSnapshot();
-        final BlockingQueue<MarketDataSnapshot> queue = new ArrayBlockingQueue<MarketDataSnapshot>(1);
+        final MarketDataSnapshot newSnapshot = givenMarketDataSnapshot(new ImmutableMarketDataSnapshot.Builder());
+        final BlockingQueue<MarketDataSnapshot> queue = new ArrayBlockingQueue<>(1);
         final CountDownLatch subscriberStarted = new CountDownLatch(1);
         final AtomicBoolean terminate = new AtomicBoolean(false);
         final NanoClock clock = new SystemNanoClock();
@@ -100,7 +104,7 @@ public class AeronPubSubTest {
                     try {
                         System.out.println(clock.nanoTime() + " poll called, len=" + len);
                         final UnsafeBuffer directBuffer = new UnsafeBuffer(buf, offset, len);
-                        final MarketDataSnapshot decoded = decode(directBuffer);
+                        final MarketDataSnapshot decoded = decode(directBuffer, new ImmutableMarketDataSnapshot.Builder());
                         queue.add(decoded);
                         System.out.println(clock.nanoTime() + " decoded: " + decoded);
                     } catch (Exception e) {
@@ -136,4 +140,70 @@ public class AeronPubSubTest {
         assertThat(decoded).isEqualTo(newSnapshot);
      }
 
+    @Test
+    public void histogramTest() throws Exception {
+        //given
+        final int w = 1000000;//warmup
+        final int c = 1000000;//counted
+        final int n = w+c;
+        final long maxTimeToRunSeconds = 10;
+        final AtomicBoolean terminate = new AtomicBoolean(false);
+        final NanoClock clock = new SystemNanoClock();
+        final Histogram histogram = new Histogram(1, 1000000000, 3);
+        final CountDownLatch subscriberLatch = new CountDownLatch(n);
+
+        //when
+        final Thread subscriberThread = new Thread(() -> {
+            final MutableMarketDataSnapshot marketDataSnapshot = new MutableMarketDataSnapshot();
+            final UnsafeBuffer unsafeBuffer = new UnsafeBuffer(0, 0);
+            final AtomicInteger count = new AtomicInteger();
+            while (!terminate.get()) {
+                subscription.poll((buf, offset, len, header) -> {
+                    try {
+                        unsafeBuffer.wrap(buf, offset, len);
+                        final MarketDataSnapshot decoded = decode(unsafeBuffer, marketDataSnapshot.builder());
+                        final long time = clock.nanoTime();
+                        if (count.incrementAndGet() >= w) {
+                            histogram.recordValue(time - decoded.getEventTimestamp());
+                        }
+                        subscriberLatch.countDown();
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
+                }, 10);
+            }
+        });
+        subscriberThread.start();
+        final Thread publisherThread = new Thread(() -> {
+            final MutableMarketDataSnapshot marketDataSnapshot = new MutableMarketDataSnapshot();
+            final UnsafeBuffer unsafeBuffer = new UnsafeBuffer(ByteBuffer.allocateDirect(4096));
+            for (int i = 0; i < n && !terminate.get(); i++) {
+                final MarketDataSnapshot newSnapshot = givenMarketDataSnapshot(marketDataSnapshot.builder());
+                final int len = encode(unsafeBuffer, newSnapshot);
+                long pubres;
+                do {
+                    pubres = publication.offer(unsafeBuffer, 0, len);
+                    if (pubres < 0) {
+                        if (pubres != Publication.BACK_PRESSURED && pubres != Publication.ADMIN_ACTION) {
+                            throw new RuntimeException("publication failed with pubres=" + pubres);
+                        }
+                    }
+                } while (pubres < 0);
+            }
+        });
+        publisherThread.start();
+
+        //then
+        if (!subscriberLatch.await(maxTimeToRunSeconds, TimeUnit.SECONDS)) {
+            terminate.set(true);
+            throw new RuntimeException("simulation timed out");
+        }
+        terminate.set(true);
+
+        publisherThread.join();
+        subscriberThread.join();
+
+        System.out.println("Histogram (micros):");
+        histogram.outputPercentileDistribution(System.out, 1000.0);
+    }
 }

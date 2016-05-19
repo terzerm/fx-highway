@@ -23,70 +23,21 @@
  */
 package org.tools4j.fx.highway.message;
 
-import com.google.common.collect.ImmutableList;
 import org.tools4j.fx.highway.sbe.CurrencyPair;
 import org.tools4j.fx.highway.sbe.Venue;
 
 import java.util.List;
-import java.util.Objects;
 
-public class MarketDataSnapshot {
-    private final long triggerTimestamp;
-    private final long eventTimestamp;
-    private final CurrencyPair currencyPair;
-    private final Venue venue;
-    private final List<RateLevel> bids;
-    private final List<RateLevel> asks;
+public interface MarketDataSnapshot {
+    long getTriggerTimestamp();
 
-    public MarketDataSnapshot(long triggerTimestamp, long eventTimestamp, CurrencyPair currencyPair, Venue venue, Iterable<RateLevel> bids, Iterable<RateLevel> asks) {
-        this.triggerTimestamp = triggerTimestamp;
-        this.eventTimestamp = eventTimestamp;
-        this.currencyPair = Objects.requireNonNull(currencyPair);
-        this.venue = Objects.requireNonNull(venue);
-        this.bids = ImmutableList.<RateLevel>builder().addAll(bids).build();
-        this.asks = ImmutableList.<RateLevel>builder().addAll(asks).build();
+    long getEventTimestamp();
 
-    }
+    CurrencyPair getCurrencyPair();
 
-    public long getTriggerTimestamp() {
-        return triggerTimestamp;
-    }
+    Venue getVenue();
 
-    public long getEventTimestamp() {
-        return eventTimestamp;
-    }
+    List<? extends RateLevel> getBids();
 
-    public CurrencyPair getCurrencyPair() {
-        return currencyPair;
-    }
-
-    public Venue getVenue() {
-        return venue;
-    }
-
-    public List<RateLevel> getBids() {
-        return bids;
-    }
-
-    public List<RateLevel> getAsks() {
-        return asks;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        final MarketDataSnapshot that = (MarketDataSnapshot) o;
-        return triggerTimestamp == that.triggerTimestamp &&
-                eventTimestamp == that.eventTimestamp &&
-                Objects.equals(currencyPair, that.currencyPair) &&
-                Objects.equals(venue, that.venue) &&
-                Objects.equals(bids, that.bids) &&
-                Objects.equals(asks, that.asks);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(triggerTimestamp, eventTimestamp, currencyPair, venue, bids, asks);
-    }
+    List<? extends RateLevel> getAsks();
 }

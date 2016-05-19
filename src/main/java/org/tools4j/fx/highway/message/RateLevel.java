@@ -23,36 +23,8 @@
  */
 package org.tools4j.fx.highway.message;
 
-import java.util.Objects;
+public interface RateLevel {
+    double getQuantity();
 
-public class RateLevel {
-    private final double quantity;
-    private final double rate;
-
-    public RateLevel(double quantity, double rate) {
-        this.quantity = quantity;
-        this.rate = rate;
-    }
-
-    public double getQuantity() {
-        return quantity;
-    }
-
-    public double getRate() {
-        return rate;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        RateLevel rateLevel = (RateLevel) o;
-        return Double.compare(rateLevel.quantity, quantity) == 0 &&
-                Double.compare(rateLevel.rate, rate) == 0;
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(quantity, rate);
-    }
+    double getRate();
 }

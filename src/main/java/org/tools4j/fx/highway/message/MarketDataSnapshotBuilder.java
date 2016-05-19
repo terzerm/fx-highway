@@ -21,9 +21,23 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package org.tools4j.fx.highway.producer;
+package org.tools4j.fx.highway.message;
 
-public interface MarketDataSnapshotProducer {
-    <C> void produceMarketDataSnapshot(MarketDataSnapshotSupplier<? super C> supplier, C context);
+import org.tools4j.fx.highway.sbe.CurrencyPair;
+import org.tools4j.fx.highway.sbe.Venue;
+
+public interface MarketDataSnapshotBuilder {
+    void setTriggerTimestamp(long triggerTimestamp);
+
+    void setEventTimestamp(long eventTimestamp);
+
+    void setCurrencyPair(CurrencyPair currencyPair);
+
+    void setVenue(Venue venue);
+
+    void addBid(double quantity, double rate);
+
+    void addAsk(double quantity, double rate);
+
+    MarketDataSnapshot build();
 }
-

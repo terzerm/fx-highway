@@ -21,20 +21,41 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package org.tools4j.fx.highway.producer;
+package org.tools4j.fx.highway.message;
 
-import org.tools4j.fx.highway.sbe.CurrencyPair;
-import org.tools4j.fx.highway.sbe.Venue;
+import java.util.Objects;
 
-/**
- * Created by terz on 18/05/2016.
- */
-public interface MarketDataSnapshotSupplier<C> {
-    long triggerTimestamp(C context);
-    long eventTimestamp(C context);
-    CurrencyPair currencyPair(C context);
-    Venue venue(C context);
-    int bidCount();
-    int askCount();
-    RateSupplier<? super C> rateSupplier(C context);
+public class MutableRateLevel implements RateLevel {
+    private double quantity;
+    private double rate;
+
+    public double getQuantity() {
+        return quantity;
+    }
+
+    public void setQuantity(double quantity) {
+        this.quantity = quantity;
+    }
+
+    public double getRate() {
+        return rate;
+    }
+
+    public void setRate(double rate) {
+        this.rate = rate;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        MutableRateLevel rateLevel = (MutableRateLevel) o;
+        return Double.compare(rateLevel.quantity, quantity) == 0 &&
+                Double.compare(rateLevel.rate, rate) == 0;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(quantity, rate);
+    }
 }
