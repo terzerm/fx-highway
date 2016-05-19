@@ -26,6 +26,8 @@ package org.tools4j.fx.highway.sbe;
 import com.google.common.collect.Lists;
 import org.agrona.concurrent.UnsafeBuffer;
 import org.junit.Test;
+import org.tools4j.fx.highway.message.MarketDataSnapshot;
+import org.tools4j.fx.highway.message.RateLevel;
 
 import java.nio.ByteBuffer;
 import java.time.Instant;

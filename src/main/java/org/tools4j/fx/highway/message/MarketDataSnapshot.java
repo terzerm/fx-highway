@@ -21,9 +21,11 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package org.tools4j.fx.highway.sbe;
+package org.tools4j.fx.highway.message;
 
 import com.google.common.collect.ImmutableList;
+import org.tools4j.fx.highway.sbe.CurrencyPair;
+import org.tools4j.fx.highway.sbe.Venue;
 
 import java.util.List;
 import java.util.Objects;
