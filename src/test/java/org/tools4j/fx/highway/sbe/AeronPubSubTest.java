@@ -23,7 +23,13 @@
  */
 package org.tools4j.fx.highway.sbe;
 
+import io.aeron.Aeron;
+import io.aeron.Publication;
+import io.aeron.Subscription;
+import io.aeron.driver.MediaDriver;
 import org.agrona.concurrent.UnsafeBuffer;
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 import org.tools4j.fx.highway.message.MarketDataSnapshot;
 
@@ -33,10 +39,33 @@ import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.tools4j.fx.highway.sbe.SerializerHelper.*;
 
-public class SimpleSerializationTest {
+public class AeronPubSubTest {
+
+    private MediaDriver mediaDriver;
+    private Aeron aeron;
+    private Subscription subscription;
+    private Publication publication;
+
+    @Before
+    public void setup() {
+        mediaDriver = MediaDriver.launchEmbedded();
+        final Aeron.Context context = new Aeron.Context();
+        context.aeronDirectoryName(mediaDriver.aeronDirectoryName());
+        aeron = Aeron.connect(context);
+        subscription = aeron.addSubscription("udp://localhost:40123", 10);
+        publication = aeron.addPublication("udp://localhost:40123", 10);
+    }
+
+    @After
+    public void tearDown() {
+        publication.close();
+        subscription.close();
+        aeron.close();
+        mediaDriver.close();
+    }
 
     @Test
-    public void shouldSerializeToSBEAndDeserializeFromSBETheSameMarketDataSnapshot() throws Exception {
+    public void subscriptionShouldReceivePublishedSnapshot() throws Exception {
         //given
         final ByteBuffer byteBuffer = ByteBuffer.allocateDirect(4096);
         final UnsafeBuffer directBuffer = new UnsafeBuffer(byteBuffer);
@@ -48,6 +77,6 @@ public class SimpleSerializationTest {
 
         //then
         assertThat(decodedSnapshot, is(newSnapshot));
-    }
+     }
 
 }

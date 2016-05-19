@@ -37,8 +37,9 @@ buildscript {
 }
 
 dependencies {
-	compile 'uk.co.real-logic:sbe-all:1.4.0-RC4'
     compile 'com.google.guava:guava:19.0'
+    compile 'uk.co.real-logic:sbe-all:1.4.0-RC4'
+    compile 'io.aeron:aeron-all:0.9.7'
     testCompile 'junit:junit:4.11'
 	testCompile 'pl.pragmatists:JUnitParams:1.0.4'
 }
