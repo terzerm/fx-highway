@@ -21,7 +21,7 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package org.tools4j.fx.highway.message;
+package org.tools4j.fx.highway.sbe;
 
 import com.google.common.collect.Lists;
 import org.agrona.concurrent.UnsafeBuffer;
@@ -47,8 +47,8 @@ public class SimpleSerializationTest {
 
         final long triggerTimestamp = Instant.now().toEpochMilli();
         final long eventTimestamp = Instant.now().minusSeconds(10).toEpochMilli();
-        final String currencyPair = "AUDUSD";
-        final String venue = "CNX";
+        final CurrencyPair currencyPair = CurrencyPair.AUDUSD;
+        final Venue venue = Venue.EBS;
         final double bidQuantity1 = 1000000;
         final double bidRate1 = 0.7524;
         final double bidQuantity2 = 2000000;
@@ -115,8 +115,8 @@ public class SimpleSerializationTest {
         mdSnapshot.wrap(directBuffer, bufferOffset)
                 .triggerTimestamp(fromSnapshot.getTriggerTimestamp())
                 .eventTimestamp(fromSnapshot.getEventTimestamp())
-                .putCurrencyPair(fromSnapshot.getCurrencyPairByteArray(MarketDataSnapshotEncoder.currencyPairCharacterEncoding()), srcOffset)
-                .putVenue(fromSnapshot.getVenueByteArray(MarketDataSnapshotEncoder.venueCharacterEncoding()), srcOffset);
+                .currencyPair(fromSnapshot.getCurrencyPair())
+                .venue(fromSnapshot.getVenue());
 
         final MarketDataSnapshotEncoder.BidsEncoder bidsEncoder = mdSnapshot.bidsCount(fromSnapshot.getBids().size());
 
@@ -142,8 +142,8 @@ public class SimpleSerializationTest {
 
         final long triggerTimestamp;
         final long eventTimestamp;
-        final String currencyPair;
-        final String venue;
+        final CurrencyPair currencyPair;
+        final Venue venue;
 
 
         mdSnapshotDecoder.wrap(directBuffer, bufferOffset, actingBlockLength, actingVersion);
@@ -154,20 +154,8 @@ public class SimpleSerializationTest {
 
         triggerTimestamp = mdSnapshotDecoder.triggerTimestamp();
         eventTimestamp = mdSnapshotDecoder.eventTimestamp();
-
-        final StringBuilder sbcp = new StringBuilder();
-        for (int i = 0, size = MarketDataSnapshotDecoder.currencyPairLength(); i < size; i++)
-        {
-            sbcp.append((char)mdSnapshotDecoder.currencyPair (i));
-        }
-        currencyPair = sbcp.toString();
-
-        final StringBuilder sbv = new StringBuilder();
-        for (int i = 0, size = MarketDataSnapshotDecoder.venueLength(); i < size; i++)
-        {
-            sbv.append((char)mdSnapshotDecoder.venue(i));
-        }
-        venue = sbv.toString();
+        currencyPair = mdSnapshotDecoder.currencyPair();
+        venue = mdSnapshotDecoder.venue();
 
         List<RateLevel> bids = Lists.newArrayList();
         List<RateLevel> asks = Lists.newArrayList();

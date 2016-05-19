@@ -21,27 +21,26 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package org.tools4j.fx.highway.message;
+package org.tools4j.fx.highway.sbe;
 
 import com.google.common.collect.ImmutableList;
 
-import java.io.UnsupportedEncodingException;
 import java.util.List;
 import java.util.Objects;
 
 public class MarketDataSnapshot {
     private final long triggerTimestamp;
     private final long eventTimestamp;
-    private final String currencyPair;
-    private final String venue;
+    private final CurrencyPair currencyPair;
+    private final Venue venue;
     private final List<RateLevel> bids;
     private final List<RateLevel> asks;
 
-    public MarketDataSnapshot(long triggerTimestamp, long eventTimestamp, String currencyPair, String venue, Iterable<RateLevel> bids, Iterable<RateLevel> asks) {
+    public MarketDataSnapshot(long triggerTimestamp, long eventTimestamp, CurrencyPair currencyPair, Venue venue, Iterable<RateLevel> bids, Iterable<RateLevel> asks) {
         this.triggerTimestamp = triggerTimestamp;
         this.eventTimestamp = eventTimestamp;
-        this.currencyPair = currencyPair;
-        this.venue = venue;
+        this.currencyPair = Objects.requireNonNull(currencyPair);
+        this.venue = Objects.requireNonNull(venue);
         this.bids = ImmutableList.<RateLevel>builder().addAll(bids).build();
         this.asks = ImmutableList.<RateLevel>builder().addAll(asks).build();
 
@@ -55,28 +54,12 @@ public class MarketDataSnapshot {
         return eventTimestamp;
     }
 
-    public String getCurrencyPair() {
+    public CurrencyPair getCurrencyPair() {
         return currencyPair;
     }
 
-    public byte[] getCurrencyPairByteArray(final String charsetName) {
-        try {
-            return currencyPair.getBytes(charsetName);
-        } catch (UnsupportedEncodingException e) {
-            throw new RuntimeException("Unsupported encoding", e);
-        }
-    }
-
-    public String getVenue() {
+    public Venue getVenue() {
         return venue;
-    }
-
-    public byte[] getVenueByteArray(final String charsetName) {
-        try {
-            return venue.getBytes(charsetName);
-        } catch (UnsupportedEncodingException e) {
-            throw new RuntimeException("Unsupported encoding", e);
-        }
     }
 
     public List<RateLevel> getBids() {
@@ -91,7 +74,7 @@ public class MarketDataSnapshot {
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        MarketDataSnapshot that = (MarketDataSnapshot) o;
+        final MarketDataSnapshot that = (MarketDataSnapshot) o;
         return triggerTimestamp == that.triggerTimestamp &&
                 eventTimestamp == that.eventTimestamp &&
                 Objects.equals(currencyPair, that.currencyPair) &&
