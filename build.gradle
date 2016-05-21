@@ -7,10 +7,15 @@ group = "org.tools4j"
 version = '1.0.1-SNAPSHOT'
 archivesBaseName = "fx-highway"
 
+def generatedSrcName = "generated-src"
+def generatedSrc = "$buildDir/$generatedSrcName"
+
 idea {
     module {
         downloadJavadoc = true
         downloadSources = true
+        excludeDirs -= file(buildDir)
+        buildDir.listFiles({d,f->f != generatedSrcName} as FilenameFilter).each {excludeDirs += it}
     }
 }
 
@@ -52,7 +57,6 @@ task extractXsd(type: Copy) {
     into buildDir
 }
 
-def generatedSrc = "$buildDir/generated-src"
 
 task sbeTool(type: JavaExec, dependsOn: extractXsd) {
     main = 'uk.co.real_logic.sbe.SbeTool'
