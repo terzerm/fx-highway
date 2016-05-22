@@ -41,10 +41,7 @@ import org.tools4j.fx.highway.message.MarketDataSnapshot;
 import org.tools4j.fx.highway.message.MutableMarketDataSnapshot;
 
 import java.nio.ByteBuffer;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -151,7 +148,8 @@ public class AeronPubSubTest {
         final int w = 1000000;//warmup
         final int c = 1000000;//counted
         final int n = w+c;
-        final long maxTimeToRunSeconds = 10;
+        final long messagesPerSecond = 160000;
+        final long maxTimeToRunSeconds = 30;
         final AtomicBoolean terminate = new AtomicBoolean(false);
         final NanoClock clock = new SystemNanoClock();
         final Histogram histogram = new Histogram(1, 1000000000, 3);
@@ -188,25 +186,24 @@ public class AeronPubSubTest {
         subscriberThread.start();
 
         //publisher
-        {
+        final Runnable publisher = new Runnable() {
             final MutableMarketDataSnapshot marketDataSnapshot = new MutableMarketDataSnapshot();
             final UnsafeBuffer unsafeBuffer = new UnsafeBuffer(ByteBuffer.allocateDirect(256));
             long cntAdmin = 0;
             long cntBackp = 0;
             long cnt = 0;
             final long t0 = clock.nanoTime();
-            final long minTime = 600;
-            final long yieldTime = 2400;
-            long timeLast = t0 - minTime;
-            for (int i = 0; i < n && !terminate.get(); i++) {
-                if (clock.nanoTime() - timeLast < minTime) {
-                    do {
-                        cnt++;
-                        Thread.yield();
-                    } while (clock.nanoTime() - timeLast < yieldTime);
+            boolean ended = false;
+            public void run() {
+                if (cnt >= n || terminate.get()) {
+                    if (!ended) {
+                        final long t1 = clock.nanoTime();
+                        System.out.println((t1 - t0) / 1000.0 + " us total publishing time (backp=" + cntBackp + ", admin=" + cntAdmin + ", cnt=" + cnt + ")");
+                        ended = true;
+                    }
+                    return;
                 }
                 final MarketDataSnapshot newSnapshot = givenMarketDataSnapshot(marketDataSnapshot.builder());
-                timeLast = newSnapshot.getEventTimestamp();
                 final int len = encode(unsafeBuffer, newSnapshot);
                 long pubres;
                 do {
@@ -219,12 +216,13 @@ public class AeronPubSubTest {
                         } else {
                             throw new RuntimeException("publication failed with pubres=" + pubres);
                         }
+                        Thread.yield();
                     }
                 } while (pubres < 0);
             }
-            final long t1 = clock.nanoTime();
-            System.out.println((t1 - t0) / 1000.0 + " us total publishing time (backp=" + cntBackp + ", admin=" + cntAdmin + ", cnt=" + cnt + ")");
-        }
+        };
+        final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+        scheduler.scheduleAtFixedRate(publisher, 0, 1000000000/messagesPerSecond, TimeUnit.NANOSECONDS);
 
         //then
         if (!subscriberLatch.await(maxTimeToRunSeconds, TimeUnit.SECONDS)) {
@@ -233,9 +231,13 @@ public class AeronPubSubTest {
         }
         terminate.set(true);
 
-        subscriberThread.join();
+        scheduler.shutdown();
+        scheduler.awaitTermination(2, TimeUnit.SECONDS);
+        scheduler.shutdownNow();
 
         System.out.println();
+        System.out.println("Percentiles (micros)");
+        System.out.println("90%    : " + histogram.getValueAtPercentile(90)/1000f);
         System.out.println("99%    : " + histogram.getValueAtPercentile(99)/1000f);
         System.out.println("99.9%  : " + histogram.getValueAtPercentile(99.9)/1000f);
         System.out.println("99.99% : " + histogram.getValueAtPercentile(99.99)/1000f);
