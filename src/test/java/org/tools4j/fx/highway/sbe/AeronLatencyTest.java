@@ -85,8 +85,14 @@ public class AeronLatencyTest {
         final int c = 200000;//counted
         final int n = w+c;
         final long messagesPerSecond = 160000;
-        final long maxTimeToRunSeconds = 30;
         final int marketDataDepth = 2;
+        final long maxTimeToRunSeconds = 30;
+
+        System.out.println("\twarmup / count      : " + w + " + " + c + " = " + n);
+        System.out.println("\tmessagesPerSecond   : " + messagesPerSecond);
+        System.out.println("\tmarketDataDepth     : " + marketDataDepth);
+        System.out.println("\tmaxTimeToRunSeconds : " + maxTimeToRunSeconds);
+        System.out.println();
 
         final AtomicBoolean terminate = new AtomicBoolean(false);
         final NanoClock clock = new SystemNanoClock();
