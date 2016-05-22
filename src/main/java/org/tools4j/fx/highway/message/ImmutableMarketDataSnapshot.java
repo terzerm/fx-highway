@@ -28,6 +28,7 @@ import com.google.common.collect.Lists;
 import org.tools4j.fx.highway.sbe.CurrencyPair;
 import org.tools4j.fx.highway.sbe.Venue;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
@@ -87,10 +88,10 @@ public class ImmutableMarketDataSnapshot implements MarketDataSnapshot {
     public ImmutableMarketDataSnapshot(long triggerTimestamp, long eventTimestamp, CurrencyPair currencyPair, Venue venue, Iterable<ImmutableRateLevel> bids, Iterable<ImmutableRateLevel> asks) {
         this.triggerTimestamp = triggerTimestamp;
         this.eventTimestamp = eventTimestamp;
-        this.currencyPair = Objects.requireNonNull(currencyPair);
-        this.venue = Objects.requireNonNull(venue);
-        this.bids = ImmutableList.<ImmutableRateLevel>builder().addAll(bids).build();
-        this.asks = ImmutableList.<ImmutableRateLevel>builder().addAll(asks).build();
+        this.currencyPair = currencyPair;
+        this.venue = venue;
+        this.bids = ImmutableList.<ImmutableRateLevel>builder().addAll(bids == null ? Collections.emptyList() : bids).build();
+        this.asks = ImmutableList.<ImmutableRateLevel>builder().addAll(asks == null ? Collections.emptyList() : asks).build();
 
     }
 
