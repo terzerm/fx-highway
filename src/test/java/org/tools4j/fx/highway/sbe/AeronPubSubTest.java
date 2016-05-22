@@ -27,6 +27,7 @@ import io.aeron.Aeron;
 import io.aeron.Publication;
 import io.aeron.Subscription;
 import io.aeron.driver.MediaDriver;
+import io.aeron.driver.ThreadingMode;
 import io.aeron.logbuffer.FragmentHandler;
 import org.HdrHistogram.Histogram;
 import org.agrona.concurrent.NanoClock;
@@ -60,10 +61,12 @@ public class AeronPubSubTest {
 
     @Before
     public void setup() {
+        final MediaDriver.Context mctx = new MediaDriver.Context();
+        mctx.threadingMode(ThreadingMode.DEDICATED);
         mediaDriver = MediaDriver.launchEmbedded();
-        final Aeron.Context context = new Aeron.Context();
-        context.aeronDirectoryName(mediaDriver.aeronDirectoryName());
-        aeron = Aeron.connect(context);
+        final Aeron.Context actx = new Aeron.Context();
+        actx.aeronDirectoryName(mediaDriver.aeronDirectoryName());
+        aeron = Aeron.connect(actx);
         subscription = aeron.addSubscription("udp://localhost:40123", 10);
         publication = aeron.addPublication("udp://localhost:40123", 10);
         int cnt = 0;
@@ -161,47 +164,66 @@ public class AeronPubSubTest {
             final AtomicInteger count = new AtomicInteger();
             final AtomicLong t0 = new AtomicLong();
             final AtomicLong t1 = new AtomicLong();
+            final AtomicLong t2 = new AtomicLong();
             final FragmentHandler fh = (buf, offset, len, header) -> {
                 if (count.get() == 0) t0.set(clock.nanoTime());
-                else if (count.get() == n-1) t1.set(clock.nanoTime());
+                else if (count.get() == w-1) t1.set(clock.nanoTime());
+                else if (count.get() == n-1) t2.set(clock.nanoTime());
                 unsafeBuffer.wrap(buf, offset, len);
                 final MarketDataSnapshot decoded = decode(unsafeBuffer, marketDataSnapshot.builder());
                 final long time = clock.nanoTime();
                 if (count.incrementAndGet() >= w) {
                     histogram.recordValue(time - decoded.getEventTimestamp());
                     if (count.get() - 10 < w) {
-                        System.out.println("c " + System.nanoTime() + ": " + time + " - " + decoded.getEventTimestamp() + ":\t" + (time - decoded.getEventTimestamp())/1000.0 + " us");
+                        //System.out.println("c " + System.nanoTime() + ": " + time + " - " + decoded.getEventTimestamp() + ":\t" + (time - decoded.getEventTimestamp())/1000.0 + " us");
                     }
                 }
                 subscriberLatch.countDown();
             };
             while (!terminate.get()) {
-                subscription.poll(fh, 10);
+                subscription.poll(fh, 256);
             }
-            System.out.println((t1.get() - t0.get())/1000.0 + " us total receiving time");
+            System.out.println((t2.get() - t0.get())/1000.0 + " us total receiving time (" + (t2.get() - t1.get())/(1000f*c) + " us/message, " + c/((t2.get()-t1.get())/1000000000f) + " messages/second)");
         });
         subscriberThread.start();
 
         //publisher
         {
             final MutableMarketDataSnapshot marketDataSnapshot = new MutableMarketDataSnapshot();
-            final UnsafeBuffer unsafeBuffer = new UnsafeBuffer(ByteBuffer.allocateDirect(128));
+            final UnsafeBuffer unsafeBuffer = new UnsafeBuffer(ByteBuffer.allocateDirect(256));
+            long cntAdmin = 0;
+            long cntBackp = 0;
+            long cnt = 0;
             final long t0 = clock.nanoTime();
+            final long minTime = 600;
+            final long yieldTime = 2400;
+            long timeLast = t0 - minTime;
             for (int i = 0; i < n && !terminate.get(); i++) {
+                if (clock.nanoTime() - timeLast < minTime) {
+                    do {
+                        cnt++;
+                        Thread.yield();
+                    } while (clock.nanoTime() - timeLast < yieldTime);
+                }
                 final MarketDataSnapshot newSnapshot = givenMarketDataSnapshot(marketDataSnapshot.builder());
+                timeLast = newSnapshot.getEventTimestamp();
                 final int len = encode(unsafeBuffer, newSnapshot);
                 long pubres;
                 do {
                     pubres = publication.offer(unsafeBuffer, 0, len);
                     if (pubres < 0) {
-                        if (pubres != Publication.BACK_PRESSURED && pubres != Publication.ADMIN_ACTION) {
+                        if (pubres == Publication.BACK_PRESSURED) {
+                            cntBackp++;
+                        } else if (pubres == Publication.ADMIN_ACTION) {
+                            cntAdmin++;
+                        } else {
                             throw new RuntimeException("publication failed with pubres=" + pubres);
                         }
                     }
                 } while (pubres < 0);
             }
             final long t1 = clock.nanoTime();
-            System.out.println((t1 - t0) / 1000.0 + " us total publishing time");
+            System.out.println((t1 - t0) / 1000.0 + " us total publishing time (backp=" + cntBackp + ", admin=" + cntAdmin + ", cnt=" + cnt + ")");
         }
 
         //then
@@ -213,6 +235,12 @@ public class AeronPubSubTest {
 
         subscriberThread.join();
 
+        System.out.println();
+        System.out.println("99%    : " + histogram.getValueAtPercentile(99)/1000f);
+        System.out.println("99.9%  : " + histogram.getValueAtPercentile(99.9)/1000f);
+        System.out.println("99.99% : " + histogram.getValueAtPercentile(99.99)/1000f);
+        System.out.println("99.999%: " + histogram.getValueAtPercentile(99.999)/1000f);
+        System.out.println();
         System.out.println("Histogram (micros):");
         histogram.outputPercentileDistribution(System.out, 1000.0);
     }
