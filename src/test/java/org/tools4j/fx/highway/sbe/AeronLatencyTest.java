@@ -108,10 +108,12 @@ public class AeronLatencyTest {
         final int c = 200000;//counted
         final int n = w+c;
         final long maxTimeToRunSeconds = 30;
+        final UnsafeBuffer sizeBuf = new UnsafeBuffer(ByteBuffer.allocateDirect(4096));
 
-        System.out.println("\twarmup / count      : " + w + " + " + c + " = " + n);
+        System.out.println("\twarmup + count      : " + w + " + " + c + " = " + n);
         System.out.println("\tmessagesPerSecond   : " + messagesPerSecond);
         System.out.println("\tmarketDataDepth     : " + marketDataDepth);
+        System.out.println("\tmessageSize         : " + encode(sizeBuf, givenMarketDataSnapshot(builderFunction.apply(argumentSupplier.get()), marketDataDepth, marketDataDepth)) + " bytes");
         System.out.println("\tmaxTimeToRunSeconds : " + maxTimeToRunSeconds);
         System.out.println();
 
