@@ -34,7 +34,9 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+import org.tools4j.fx.highway.message.ImmutableMarketDataSnapshot;
 import org.tools4j.fx.highway.message.MarketDataSnapshot;
+import org.tools4j.fx.highway.message.MarketDataSnapshotBuilder;
 import org.tools4j.fx.highway.message.MutableMarketDataSnapshot;
 
 import java.nio.ByteBuffer;
@@ -47,6 +49,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Function;
+import java.util.function.Supplier;
 
 import static org.tools4j.fx.highway.sbe.SerializerHelper.*;
 
@@ -87,13 +91,30 @@ public class AeronLatencyTest {
     }
 
     @Test
-    public void latencyTest() throws Exception {
+    public void latencyTestImmutable() throws Exception {
+        latencyTest((s) -> new ImmutableMarketDataSnapshot.Builder(), () -> null);
+    }
+
+    @Test
+    public void latencyTestMutable() throws Exception {
+        latencyTest((s) -> s.builder(), () -> new MutableMarketDataSnapshot());
+    }
+
+    private <B> void latencyTest(final Function<B, MarketDataSnapshotBuilder> builderFunction, final Supplier<B> argumentSupplier) throws Exception {
         System.out.println("Parameterized messagesPerSecond: " + messagesPerSecond + ", marketDataDepth:" + marketDataDepth);
+
+        System.out.println("Using " + builderFunction.apply(argumentSupplier.get()).build().getClass().getSimpleName());
         //given
         final int w = 1000000;//warmup
         final int c = 200000;//counted
         final int n = w+c;
         final long maxTimeToRunSeconds = 30;
+
+        System.out.println("\twarmup / count      : " + w + " + " + c + " = " + n);
+        System.out.println("\tmessagesPerSecond   : " + messagesPerSecond);
+        System.out.println("\tmarketDataDepth     : " + marketDataDepth);
+        System.out.println("\tmaxTimeToRunSeconds : " + maxTimeToRunSeconds);
+        System.out.println();
 
         final AtomicBoolean terminate = new AtomicBoolean(false);
         final NanoClock clock = SerializerHelper.NANO_CLOCK;
@@ -103,7 +124,7 @@ public class AeronLatencyTest {
 
         //when
         final Thread subscriberThread = new Thread(() -> {
-            final MutableMarketDataSnapshot marketDataSnapshot = new MutableMarketDataSnapshot();
+            final B builderArg = argumentSupplier.get();
             final UnsafeBuffer unsafeBuffer = new UnsafeBuffer(0, 0);
             final AtomicLong t0 = new AtomicLong();
             final AtomicLong t1 = new AtomicLong();
@@ -113,7 +134,7 @@ public class AeronLatencyTest {
                 else if (count.get() == w-1) t1.set(clock.nanoTime());
                 else if (count.get() == n-1) t2.set(clock.nanoTime());
                 unsafeBuffer.wrap(buf, offset, len);
-                final MarketDataSnapshot decoded = decode(unsafeBuffer, marketDataSnapshot.builder());
+                final MarketDataSnapshot decoded = decode(unsafeBuffer, builderFunction.apply(builderArg));
                 final long time = clock.nanoTime();
                 final int cnt = count.incrementAndGet();
                 if (cnt <= n) {
@@ -136,7 +157,7 @@ public class AeronLatencyTest {
 
         //publisher
         final Runnable publisher = new Runnable() {
-            final MutableMarketDataSnapshot marketDataSnapshot = new MutableMarketDataSnapshot();
+            final B builderArg = argumentSupplier.get();
             final UnsafeBuffer unsafeBuffer = new UnsafeBuffer(ByteBuffer.allocateDirect(4096));
             long cntAdmin = 0;
             long cntBackp = 0;
@@ -152,7 +173,7 @@ public class AeronLatencyTest {
                     }
                     return;
                 }
-                final MarketDataSnapshot newSnapshot = givenMarketDataSnapshot(marketDataSnapshot.builder(), marketDataDepth, marketDataDepth);
+                final MarketDataSnapshot newSnapshot = givenMarketDataSnapshot(builderFunction.apply(builderArg), marketDataDepth, marketDataDepth);
                 final int len = encode(unsafeBuffer, newSnapshot);
                 long pubres;
                 do {

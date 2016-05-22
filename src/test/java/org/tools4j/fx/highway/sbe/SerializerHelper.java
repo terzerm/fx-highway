@@ -41,6 +41,7 @@ class SerializerHelper {
     static MarketDataSnapshot givenMarketDataSnapshot(final MarketDataSnapshotBuilder builder) {
         return givenMarketDataSnapshot(builder, 10, 10);
     }
+
     static MarketDataSnapshot givenMarketDataSnapshot(final MarketDataSnapshotBuilder builder,
                                                       final int bids, final int asks) {
         final long triggerTimestamp = NANO_CLOCK.nanoTime();

@@ -31,6 +31,8 @@ import org.junit.Before;
 import org.junit.Test;
 import org.tools4j.fx.highway.message.ImmutableMarketDataSnapshot;
 import org.tools4j.fx.highway.message.MarketDataSnapshot;
+import org.tools4j.fx.highway.message.MarketDataSnapshotBuilder;
+import org.tools4j.fx.highway.message.MutableMarketDataSnapshot;
 
 import java.nio.ByteBuffer;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -38,6 +40,8 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Function;
+import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.tools4j.fx.highway.sbe.SerializerHelper.*;
@@ -61,9 +65,20 @@ public class AeronPubSubTest {
     }
 
     @Test
-    public void subscriptionShouldReceivePublishedSnapshot() throws Exception {
+    public void subscriptionShouldReceivePublishedImmutableSnapshot() throws Exception {
+        pubSub((s) -> new ImmutableMarketDataSnapshot.Builder(), () -> null);
+    }
+
+    @Test
+    public void subscriptionShouldReceivePublishedMutableSnapshot() throws Exception {
+        pubSub((s) -> s.builder(), () -> new MutableMarketDataSnapshot());
+    }
+
+    private <B> void pubSub(final Function<B, MarketDataSnapshotBuilder> builderFunction, final Supplier<B> argumentSupplier) throws Exception {
+        System.out.println("Using " + builderFunction.apply(argumentSupplier.get()).build().getClass().getSimpleName());
+
         //given
-        final MarketDataSnapshot newSnapshot = givenMarketDataSnapshot(new ImmutableMarketDataSnapshot.Builder());
+        final MarketDataSnapshot newSnapshot = givenMarketDataSnapshot(builderFunction.apply(argumentSupplier.get()));
         final BlockingQueue<MarketDataSnapshot> queue = new ArrayBlockingQueue<>(1);
         final CountDownLatch subscriberStarted = new CountDownLatch(1);
         final AtomicBoolean terminate = new AtomicBoolean(false);
@@ -78,7 +93,7 @@ public class AeronPubSubTest {
                     try {
                         System.out.println(clock.nanoTime() + " poll called, len=" + len);
                         final UnsafeBuffer directBuffer = new UnsafeBuffer(buf, offset, len);
-                        final MarketDataSnapshot decoded = decode(directBuffer, new ImmutableMarketDataSnapshot.Builder());
+                        final MarketDataSnapshot decoded = decode(directBuffer, builderFunction.apply(argumentSupplier.get()));
                         queue.add(decoded);
                         System.out.println(clock.nanoTime() + " decoded: " + decoded);
                     } catch (Exception e) {

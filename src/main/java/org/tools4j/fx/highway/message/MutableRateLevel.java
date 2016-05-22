@@ -58,4 +58,9 @@ public class MutableRateLevel implements RateLevel {
     public int hashCode() {
         return Objects.hash(quantity, rate);
     }
+
+    @Override
+    public String toString() {
+        return quantity + "@" + rate;
+    }
 }
