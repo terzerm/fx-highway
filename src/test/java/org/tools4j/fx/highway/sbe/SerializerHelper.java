@@ -28,6 +28,7 @@ import org.agrona.concurrent.SystemNanoClock;
 import org.agrona.concurrent.UnsafeBuffer;
 import org.tools4j.fx.highway.message.MarketDataSnapshot;
 import org.tools4j.fx.highway.message.MarketDataSnapshotBuilder;
+import org.tools4j.fx.highway.message.RateLevel;
 
 class SerializerHelper {
 
@@ -38,28 +39,32 @@ class SerializerHelper {
     private static final MarketDataSnapshotEncoder MD_SNAPSHOT_ENCODER = new MarketDataSnapshotEncoder();
 
     static MarketDataSnapshot givenMarketDataSnapshot(final MarketDataSnapshotBuilder builder) {
+        return givenMarketDataSnapshot(builder, 10, 10);
+    }
+    static MarketDataSnapshot givenMarketDataSnapshot(final MarketDataSnapshotBuilder builder,
+                                                      final int bids, final int asks) {
         final long triggerTimestamp = NANO_CLOCK.nanoTime();
         final long eventTimestamp = triggerTimestamp;
         final CurrencyPair currencyPair = CurrencyPair.AUDUSD;
         final Venue venue = Venue.EBS;
-        final double bidQuantity1 = 1000000;
-        final double bidRate1 = 0.7524;
-        final double bidQuantity2 = 2000000;
-        final double bidRate2 = 0.7522;
+        final double bidQuantity = 1000000;
+        final double bidRate = 0.7524;
+        final double bidDiff = 0.0001;
 
-        final double askQuantity1 = 1000000;
-        final double askRate1 = 0.7534;
-        final double askQuantity2 = 2000000;
-        final double askRate2 = 0.7537;
+        final double askQuantity = 1000000;
+        final double askRate = 0.7534;
+        final double askDiff = 0.0001;
 
         builder.setTriggerTimestamp(triggerTimestamp);
         builder.setEventTimestamp(eventTimestamp);
         builder.setCurrencyPair(currencyPair);
         builder.setVenue(venue);
-        builder.addBid(bidQuantity1, bidRate1);
-        builder.addBid(bidQuantity2, bidRate2);
-        builder.addAsk(askQuantity1, askRate1);
-        builder.addAsk(askQuantity2, askRate2);
+        for (int i = 0; i < bids; i++) {
+            builder.addBid(i*bidQuantity, bidRate - i*bidDiff);
+        }
+        for (int i = 0; i < asks; i++) {
+            builder.addAsk(i*askQuantity, askRate + i*askDiff);
+        }
 
         return builder.build();
     }
@@ -81,12 +86,16 @@ class SerializerHelper {
                 .venue(fromSnapshot.getVenue());
 
         final MarketDataSnapshotEncoder.BidsEncoder bidsEncoder = MD_SNAPSHOT_ENCODER.bidsCount(fromSnapshot.getBids().size());
-
-        fromSnapshot.getBids().forEach(b -> bidsEncoder.next().quantity(b.getQuantity()).rate(b.getRate()));
+        for (int i = 0; i < fromSnapshot.getBids().size(); i++) {
+            final RateLevel l = fromSnapshot.getBids().get(i);
+            bidsEncoder.next().quantity(l.getQuantity()).rate(l.getRate());
+        }
 
         final MarketDataSnapshotEncoder.AsksEncoder asksEncoder = MD_SNAPSHOT_ENCODER.asksCount(fromSnapshot.getAsks().size());
-
-        fromSnapshot.getAsks().forEach(a -> asksEncoder.next().quantity(a.getQuantity()).rate(a.getRate()));
+        for (int i = 0; i < fromSnapshot.getAsks().size(); i++) {
+            final RateLevel l = fromSnapshot.getAsks().get(i);
+            asksEncoder.next().quantity(l.getQuantity()).rate(l.getRate());
+        }
 
         return MESSAGE_HEADER_ENCODER.encodedLength() + MD_SNAPSHOT_ENCODER.encodedLength();
     }
@@ -117,8 +126,16 @@ class SerializerHelper {
         builder.setCurrencyPair(MD_SNAPSHOT_DECODER.currencyPair());
         builder.setVenue(MD_SNAPSHOT_DECODER.venue());
 
-        MD_SNAPSHOT_DECODER.bids().forEach(bd -> builder.addBid(bd.quantity(), bd.rate()));
-        MD_SNAPSHOT_DECODER.asks().forEach(ad -> builder.addAsk(ad.quantity(), ad.rate()));
+        final MarketDataSnapshotDecoder.BidsDecoder bidsDecoder = MD_SNAPSHOT_DECODER.bids();
+        while (bidsDecoder.hasNext()) {
+            bidsDecoder.next();
+            builder.addBid(bidsDecoder.quantity(), bidsDecoder.rate());
+        }
+        final MarketDataSnapshotDecoder.AsksDecoder asksDecoder = MD_SNAPSHOT_DECODER.asks();
+        while (asksDecoder.hasNext()) {
+            asksDecoder.next();
+            builder.addAsk(asksDecoder.quantity(), asksDecoder.rate());
+        }
 
         return builder.build();
     }
