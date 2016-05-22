@@ -85,7 +85,6 @@ public class AeronLatencyTest {
     public static Collection testRunParameters() {
         return Arrays.asList(new Object[][] {
                 { 160000, 2 },
-                { 160000, 2 },
                 { 50000, 2 }
         });
     }
