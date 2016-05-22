@@ -60,6 +60,14 @@ public class AeronLatencyTest {
     final long messagesPerSecond;
     final int marketDataDepth;
 
+    @Parameterized.Parameters(name = "{index}: messagesPerSecond[{0}], marketDataDepth[{1}]")
+    public static Collection testRunParameters() {
+        return Arrays.asList(new Object[][] {
+                { 160000, 2 },
+                { 500000, 2 }
+        });
+    }
+
     public AeronLatencyTest(final long messagesPerSecond, final int marketDataDepth) {
         this.messagesPerSecond = messagesPerSecond;
         this.marketDataDepth = marketDataDepth;
@@ -81,13 +89,6 @@ public class AeronLatencyTest {
         }
     }
 
-    @Parameterized.Parameters(name = "{index}: messagesPerSecond[{0}], marketDataDepth[{1}]")
-    public static Collection testRunParameters() {
-        return Arrays.asList(new Object[][] {
-                { 160000, 2 },
-                { 500000, 2 }
-        });
-    }
 
     @Test
     public void latencyTestImmutable() throws Exception {
