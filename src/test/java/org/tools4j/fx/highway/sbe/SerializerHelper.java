@@ -32,7 +32,7 @@ import org.tools4j.fx.highway.message.RateLevel;
 
 class SerializerHelper {
 
-    private static final NanoClock NANO_CLOCK = new SystemNanoClock();
+    public static final NanoClock NANO_CLOCK = new SystemNanoClock();
     private static final MessageHeaderDecoder MESSAGE_HEADER_DECODER = new MessageHeaderDecoder();
     private static final MessageHeaderEncoder MESSAGE_HEADER_ENCODER = new MessageHeaderEncoder();
     private static final MarketDataSnapshotDecoder MD_SNAPSHOT_DECODER = new MarketDataSnapshotDecoder();

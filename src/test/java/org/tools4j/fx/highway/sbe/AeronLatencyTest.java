@@ -32,10 +32,14 @@ import org.agrona.concurrent.UnsafeBuffer;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 import org.tools4j.fx.highway.message.MarketDataSnapshot;
 import org.tools4j.fx.highway.message.MutableMarketDataSnapshot;
 
 import java.nio.ByteBuffer;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -46,7 +50,16 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import static org.tools4j.fx.highway.sbe.SerializerHelper.*;
 
+@RunWith(Parameterized.class)
 public class AeronLatencyTest {
+
+    final long messagesPerSecond;
+    final int marketDataDepth;
+
+    public AeronLatencyTest(final long messagesPerSecond, final int marketDataDepth) {
+        this.messagesPerSecond = messagesPerSecond;
+        this.marketDataDepth = marketDataDepth;
+    }
 
     private EmbeddedAeron embeddedAeron;
 
@@ -64,18 +77,26 @@ public class AeronLatencyTest {
         }
     }
 
+    @Parameterized.Parameters(name = "{index}: messagesPerSecond[{0}], marketDataDepth[{1}]")
+    public static Collection testRunParameters() {
+        return Arrays.asList(new Object[][] {
+                { 160000, 2 },
+                { 160000, 2 },
+                { 50000, 2 }
+        });
+    }
+
     @Test
     public void latencyTest() throws Exception {
+        System.out.println("Parameterized messagesPerSecond: " + messagesPerSecond + ", marketDataDepth:" + marketDataDepth);
         //given
         final int w = 1000000;//warmup
         final int c = 200000;//counted
         final int n = w+c;
-        final long messagesPerSecond = 160000;
         final long maxTimeToRunSeconds = 30;
-        final int marketDataDepth = 2;
 
         final AtomicBoolean terminate = new AtomicBoolean(false);
-        final NanoClock clock = new SystemNanoClock();
+        final NanoClock clock = SerializerHelper.NANO_CLOCK;
         final Histogram histogram = new Histogram(1, 1000000000, 3);
         final CountDownLatch subscriberLatch = new CountDownLatch(1);
         final AtomicInteger count = new AtomicInteger();
