@@ -57,18 +57,21 @@ import static org.tools4j.fx.highway.sbe.SerializerHelper.*;
 @RunWith(Parameterized.class)
 public class AeronLatencyTest {
 
+    final String channel;
     final long messagesPerSecond;
     final int marketDataDepth;
 
-    @Parameterized.Parameters(name = "{index}: messagesPerSecond[{0}], marketDataDepth[{1}]")
+    @Parameterized.Parameters(name = "{index}: CH={0}, MPS={1}, D={2}")
     public static Collection testRunParameters() {
         return Arrays.asList(new Object[][] {
-                { 160000, 2 },
-                { 500000, 2 }
+                { "aeron:ipc", 160000, 2 },
+                { "aeron:ipc", 500000, 2 },
+                { "udp://localhost:40123", 160000, 2 }
         });
     }
 
-    public AeronLatencyTest(final long messagesPerSecond, final int marketDataDepth) {
+    public AeronLatencyTest(final String channel, final long messagesPerSecond, final int marketDataDepth) {
+        this.channel = channel;
         this.messagesPerSecond = messagesPerSecond;
         this.marketDataDepth = marketDataDepth;
     }
@@ -77,7 +80,7 @@ public class AeronLatencyTest {
 
     @Before
     public void setup() {
-        embeddedAeron = new EmbeddedAeron();
+        embeddedAeron = new EmbeddedAeron(channel, 10);
         embeddedAeron.awaitConnection(5, TimeUnit.SECONDS);
     }
 
@@ -101,7 +104,6 @@ public class AeronLatencyTest {
     }
 
     private <B> void latencyTest(final Function<B, MarketDataSnapshotBuilder> builderFunction, final Supplier<B> argumentSupplier) throws Exception {
-        System.out.println("Parameterized messagesPerSecond: " + messagesPerSecond + ", marketDataDepth:" + marketDataDepth);
 
         System.out.println("Using " + builderFunction.apply(argumentSupplier.get()).build().getClass().getSimpleName());
         //given
@@ -111,6 +113,7 @@ public class AeronLatencyTest {
         final long maxTimeToRunSeconds = 30;
         final UnsafeBuffer sizeBuf = new UnsafeBuffer(ByteBuffer.allocateDirect(4096));
 
+        System.out.println("\tchannel             : " + channel);
         System.out.println("\twarmup + count      : " + w + " + " + c + " = " + n);
         System.out.println("\tmessagesPerSecond   : " + messagesPerSecond);
         System.out.println("\tmarketDataDepth     : " + marketDataDepth);
