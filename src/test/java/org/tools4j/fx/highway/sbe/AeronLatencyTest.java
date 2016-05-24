@@ -110,7 +110,7 @@ public class AeronLatencyTest {
         final int w = 1000000;//warmup
         final int c = 200000;//counted
         final int n = w+c;
-        final long maxTimeToRunSeconds = 30;
+        final long maxTimeToRunSeconds = 60;
         final UnsafeBuffer sizeBuf = new UnsafeBuffer(ByteBuffer.allocateDirect(4096));
 
         System.out.println("\tchannel             : " + channel);
