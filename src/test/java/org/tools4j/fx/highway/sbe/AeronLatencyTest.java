@@ -27,29 +27,27 @@ import io.aeron.Publication;
 import io.aeron.logbuffer.FragmentHandler;
 import org.HdrHistogram.Histogram;
 import org.agrona.concurrent.NanoClock;
-import org.agrona.concurrent.SystemNanoClock;
 import org.agrona.concurrent.UnsafeBuffer;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
-import org.tools4j.fx.highway.message.ImmutableMarketDataSnapshot;
+import org.octtech.bw.ByteWatcher;
 import org.tools4j.fx.highway.message.MarketDataSnapshot;
 import org.tools4j.fx.highway.message.MarketDataSnapshotBuilder;
 import org.tools4j.fx.highway.message.MutableMarketDataSnapshot;
+import org.tools4j.fx.highway.message.SupplierFactory;
 
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.Function;
 import java.util.function.Supplier;
 
 import static org.tools4j.fx.highway.sbe.SerializerHelper.*;
@@ -57,31 +55,45 @@ import static org.tools4j.fx.highway.sbe.SerializerHelper.*;
 @RunWith(Parameterized.class)
 public class AeronLatencyTest {
 
-    final String channel;
-    final long messagesPerSecond;
-    final int marketDataDepth;
+    private final String channel;
+    private final long messagesPerSecond;
+    private final int marketDataDepth;
+    private final SupplierFactory<MarketDataSnapshotBuilder> builderSupplierFactory;
+
+    private EmbeddedAeron embeddedAeron;
+    private ByteWatcher byteWatcher;
 
     @Parameterized.Parameters(name = "{index}: CH={0}, MPS={1}, D={2}")
     public static Collection testRunParameters() {
         return Arrays.asList(new Object[][] {
-                { "aeron:ipc", 160000, 2 },
-                { "aeron:ipc", 500000, 2 },
-                { "udp://localhost:40123", 160000, 2 }
+//                { "aeron:ipc", 160000, 2, MutableMarketDataSnapshot.BUILDER_FACTORY },
+//                { "aeron:ipc", 500000, 2, MutableMarketDataSnapshot.BUILDER_FACTORY },
+//                { "udp://localhost:40123", 160000, 2, MutableMarketDataSnapshot.BUILDER_FACTORY },
+                { "udp://224.10.9.7:4050", 160000, 2, MutableMarketDataSnapshot.BUILDER_FACTORY }
         });
     }
 
-    public AeronLatencyTest(final String channel, final long messagesPerSecond, final int marketDataDepth) {
-        this.channel = channel;
+    public AeronLatencyTest(final String channel,
+                            final long messagesPerSecond,
+                            final int marketDataDepth,
+                            final SupplierFactory<MarketDataSnapshotBuilder> builderSupplierFactory) {
+        this.channel = Objects.requireNonNull(channel);
         this.messagesPerSecond = messagesPerSecond;
         this.marketDataDepth = marketDataDepth;
+        this.builderSupplierFactory = Objects.requireNonNull(builderSupplierFactory);
     }
-
-    private EmbeddedAeron embeddedAeron;
 
     @Before
     public void setup() {
         embeddedAeron = new EmbeddedAeron(channel, 10);
         embeddedAeron.awaitConnection(5, TimeUnit.SECONDS);
+
+        final long limit = 1<<20;
+        byteWatcher = new ByteWatcher();
+        byteWatcher.onByteWatch((t, size) ->
+                        System.out.printf("%s exceeded limit: %d using: %d%n",
+                                t.getName(), limit, size)
+                , limit);
     }
 
     @After
@@ -90,22 +102,16 @@ public class AeronLatencyTest {
             embeddedAeron.shutdown();
             embeddedAeron = null;
         }
-    }
-
-
-    @Test
-    public void latencyTestImmutable() throws Exception {
-        latencyTest((s) -> new ImmutableMarketDataSnapshot.Builder(), () -> null);
+        if (byteWatcher != null) {
+            byteWatcher.shutdown();
+            byteWatcher = null;
+        }
     }
 
     @Test
-    public void latencyTestMutable() throws Exception {
-        latencyTest((s) -> s.builder(), () -> new MutableMarketDataSnapshot());
-    }
-
-    private <B> void latencyTest(final Function<B, MarketDataSnapshotBuilder> builderFunction, final Supplier<B> argumentSupplier) throws Exception {
-
-        System.out.println("Using " + builderFunction.apply(argumentSupplier.get()).build().getClass().getSimpleName());
+    public void latencyTest() throws Exception {
+        final MarketDataSnapshotBuilder builder = builderSupplierFactory.create().get();
+        System.out.println("Using " + builder.build().getClass().getSimpleName());
         //given
         final int w = 1000000;//warmup
         final int c = 200000;//counted
@@ -117,7 +123,7 @@ public class AeronLatencyTest {
         System.out.println("\twarmup + count      : " + w + " + " + c + " = " + n);
         System.out.println("\tmessagesPerSecond   : " + messagesPerSecond);
         System.out.println("\tmarketDataDepth     : " + marketDataDepth);
-        System.out.println("\tmessageSize         : " + encode(sizeBuf, givenMarketDataSnapshot(builderFunction.apply(argumentSupplier.get()), marketDataDepth, marketDataDepth)) + " bytes");
+        System.out.println("\tmessageSize         : " + encode(sizeBuf, givenMarketDataSnapshot(builder, marketDataDepth, marketDataDepth)) + " bytes");
         System.out.println("\tmaxTimeToRunSeconds : " + maxTimeToRunSeconds);
         System.out.println();
 
@@ -129,7 +135,7 @@ public class AeronLatencyTest {
 
         //when
         final Thread subscriberThread = new Thread(() -> {
-            final B builderArg = argumentSupplier.get();
+            final Supplier<MarketDataSnapshotBuilder> builderSupplier = builderSupplierFactory.create();
             final UnsafeBuffer unsafeBuffer = new UnsafeBuffer(0, 0);
             final AtomicLong t0 = new AtomicLong();
             final AtomicLong t1 = new AtomicLong();
@@ -139,7 +145,7 @@ public class AeronLatencyTest {
                 else if (count.get() == w-1) t1.set(clock.nanoTime());
                 else if (count.get() == n-1) t2.set(clock.nanoTime());
                 unsafeBuffer.wrap(buf, offset, len);
-                final MarketDataSnapshot decoded = decode(unsafeBuffer, builderFunction.apply(builderArg));
+                final MarketDataSnapshot decoded = decode(unsafeBuffer, builderSupplier.get());
                 final long time = clock.nanoTime();
                 final int cnt = count.incrementAndGet();
                 if (cnt <= n) {
@@ -161,24 +167,20 @@ public class AeronLatencyTest {
         subscriberThread.start();
 
         //publisher
-        final Runnable publisher = new Runnable() {
-            final B builderArg = argumentSupplier.get();
+        final Thread publisherThread = new Thread(() -> {
+            final Supplier<MarketDataSnapshotBuilder> builderSupplier = builderSupplierFactory.create();
             final UnsafeBuffer unsafeBuffer = new UnsafeBuffer(ByteBuffer.allocateDirect(4096));
+            final long periodNs = 1000000000/messagesPerSecond;
             long cntAdmin = 0;
             long cntBackp = 0;
             long cnt = 0;
             final long t0 = clock.nanoTime();
-            boolean ended = false;
-            public void run() {
-                if (cnt >= n || terminate.get()) {
-                    if (!ended) {
-                        final long t1 = clock.nanoTime();
-                        System.out.println((t1 - t0) / 1000.0 + " us total publishing time (backp=" + cntBackp + ", admin=" + cntAdmin + ", cnt=" + cnt + ")");
-                        ended = true;
-                    }
-                    return;
+            while (cnt < n && !terminate.get()) {
+                long tCur = clock.nanoTime();
+                while (tCur - t0 < cnt * periodNs) {
+                    tCur = clock.nanoTime();
                 }
-                final MarketDataSnapshot newSnapshot = givenMarketDataSnapshot(builderFunction.apply(builderArg), marketDataDepth, marketDataDepth);
+                final MarketDataSnapshot newSnapshot = givenMarketDataSnapshot(builderSupplier.get(), marketDataDepth, marketDataDepth);
                 final int len = encode(unsafeBuffer, newSnapshot);
                 long pubres;
                 do {
@@ -194,10 +196,13 @@ public class AeronLatencyTest {
                         Thread.yield();
                     }
                 } while (pubres < 0);
+                cnt++;
             }
-        };
-        final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
-        scheduler.scheduleAtFixedRate(publisher, 0, 1000000000/messagesPerSecond, TimeUnit.NANOSECONDS);
+            final long t1 = clock.nanoTime();
+            System.out.println((t1 - t0) / 1000.0 + " us total publishing time (backp=" + cntBackp + ", admin=" + cntAdmin + ", cnt=" + cnt + ")");
+        });
+        publisherThread.setName("publisher-thread");
+        publisherThread.start();;
 
         //then
         if (!subscriberLatch.await(maxTimeToRunSeconds, TimeUnit.SECONDS)) {
@@ -207,9 +212,7 @@ public class AeronLatencyTest {
         }
         terminate.set(true);
 
-        scheduler.shutdown();
-        scheduler.awaitTermination(2, TimeUnit.SECONDS);
-        scheduler.shutdownNow();
+        publisherThread.join(2000);
 
         System.out.println();
         System.out.println("Percentiles (micros)");
@@ -222,5 +225,15 @@ public class AeronLatencyTest {
         System.out.println();
         System.out.println("Histogram (micros):");
         histogram.outputPercentileDistribution(System.out, 1000.0);
+    }
+
+    public static void main(String... args) throws Exception {
+        final AeronLatencyTest aeronLatencyTest = new AeronLatencyTest("udp://224.10.9.7:4050", 160000, 2, MutableMarketDataSnapshot.BUILDER_FACTORY);
+        aeronLatencyTest.setup();
+        try {
+            aeronLatencyTest.latencyTest();
+        } finally {
+            aeronLatencyTest.tearDown();
+        }
     }
 }

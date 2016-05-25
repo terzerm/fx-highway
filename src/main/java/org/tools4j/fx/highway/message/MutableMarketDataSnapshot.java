@@ -30,8 +30,20 @@ import java.util.AbstractList;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Supplier;
 
 public class MutableMarketDataSnapshot implements MarketDataSnapshot {
+
+    public static final SupplierFactory<MarketDataSnapshotBuilder> BUILDER_FACTORY = () -> new Supplier() {
+
+        private final MutableMarketDataSnapshot snapshot = new MutableMarketDataSnapshot();
+
+        @Override
+        public MarketDataSnapshotBuilder get() {
+            return snapshot.builder();
+        }
+    };
+
     private long triggerTimestamp;
     private long eventTimestamp;
     private CurrencyPair currencyPair;
