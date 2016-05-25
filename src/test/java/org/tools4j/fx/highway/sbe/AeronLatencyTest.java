@@ -66,10 +66,10 @@ public class AeronLatencyTest {
     @Parameterized.Parameters(name = "{index}: CH={0}, MPS={1}, D={2}")
     public static Collection testRunParameters() {
         return Arrays.asList(new Object[][] {
-//                { "aeron:ipc", 160000, 2, MutableMarketDataSnapshot.BUILDER_FACTORY },
-//                { "aeron:ipc", 500000, 2, MutableMarketDataSnapshot.BUILDER_FACTORY },
-//                { "udp://localhost:40123", 160000, 2, MutableMarketDataSnapshot.BUILDER_FACTORY },
-                { "udp://224.10.9.7:4050", 160000, 2, MutableMarketDataSnapshot.BUILDER_FACTORY }
+                { "aeron:ipc", 160000, 2, MutableMarketDataSnapshot.BUILDER_SUPPLIER_FACTORY },
+                { "aeron:ipc", 500000, 2, MutableMarketDataSnapshot.BUILDER_SUPPLIER_FACTORY },
+                { "udp://localhost:40123", 160000, 2, MutableMarketDataSnapshot.BUILDER_SUPPLIER_FACTORY },
+                { "udp://224.10.9.7:4050", 160000, 2, MutableMarketDataSnapshot.BUILDER_SUPPLIER_FACTORY}
         });
     }
 
@@ -228,7 +228,7 @@ public class AeronLatencyTest {
     }
 
     public static void main(String... args) throws Exception {
-        final AeronLatencyTest aeronLatencyTest = new AeronLatencyTest("udp://224.10.9.7:4050", 160000, 2, MutableMarketDataSnapshot.BUILDER_FACTORY);
+        final AeronLatencyTest aeronLatencyTest = new AeronLatencyTest("udp://224.10.9.7:4050", 160000, 2, MutableMarketDataSnapshot.BUILDER_SUPPLIER_FACTORY);
         aeronLatencyTest.setup();
         try {
             aeronLatencyTest.latencyTest();

@@ -34,7 +34,7 @@ import java.util.function.Supplier;
 
 public class MutableMarketDataSnapshot implements MarketDataSnapshot {
 
-    public static final SupplierFactory<MarketDataSnapshotBuilder> BUILDER_FACTORY = () -> new Supplier() {
+    public static final SupplierFactory<MarketDataSnapshotBuilder> BUILDER_SUPPLIER_FACTORY = () -> new Supplier() {
 
         private final MutableMarketDataSnapshot snapshot = new MutableMarketDataSnapshot();
 
