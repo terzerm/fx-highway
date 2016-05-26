@@ -21,7 +21,7 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package org.tools4j.fx.highway.sbe;
+package org.tools4j.fx.highway.aeron;
 
 import io.aeron.Publication;
 import io.aeron.logbuffer.FragmentHandler;
@@ -38,6 +38,7 @@ import org.tools4j.fx.highway.message.MarketDataSnapshot;
 import org.tools4j.fx.highway.message.MarketDataSnapshotBuilder;
 import org.tools4j.fx.highway.message.MutableMarketDataSnapshot;
 import org.tools4j.fx.highway.message.SupplierFactory;
+import org.tools4j.fx.highway.sbe.SerializerHelper;
 
 import java.nio.ByteBuffer;
 import java.util.Arrays;
@@ -53,7 +54,7 @@ import java.util.function.Supplier;
 import static org.tools4j.fx.highway.sbe.SerializerHelper.*;
 
 @RunWith(Parameterized.class)
-public class AeronLatencyTest {
+public class AeronEmbeddedLatencyTest {
 
     private final String channel;
     private final long messagesPerSecond;
@@ -73,10 +74,10 @@ public class AeronLatencyTest {
         });
     }
 
-    public AeronLatencyTest(final String channel,
-                            final long messagesPerSecond,
-                            final int marketDataDepth,
-                            final SupplierFactory<MarketDataSnapshotBuilder> builderSupplierFactory) {
+    public AeronEmbeddedLatencyTest(final String channel,
+                                    final long messagesPerSecond,
+                                    final int marketDataDepth,
+                                    final SupplierFactory<MarketDataSnapshotBuilder> builderSupplierFactory) {
         this.channel = Objects.requireNonNull(channel);
         this.messagesPerSecond = messagesPerSecond;
         this.marketDataDepth = marketDataDepth;
@@ -228,7 +229,7 @@ public class AeronLatencyTest {
     }
 
     public static void main(String... args) throws Exception {
-        final AeronLatencyTest aeronLatencyTest = new AeronLatencyTest("udp://224.10.9.7:4050", 160000, 2, MutableMarketDataSnapshot.BUILDER_SUPPLIER_FACTORY);
+        final AeronEmbeddedLatencyTest aeronLatencyTest = new AeronEmbeddedLatencyTest("udp://224.10.9.7:4050", 160000, 2, MutableMarketDataSnapshot.BUILDER_SUPPLIER_FACTORY);
         aeronLatencyTest.setup();
         try {
             aeronLatencyTest.latencyTest();

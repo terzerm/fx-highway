@@ -30,7 +30,7 @@ import org.tools4j.fx.highway.message.MarketDataSnapshot;
 import org.tools4j.fx.highway.message.MarketDataSnapshotBuilder;
 import org.tools4j.fx.highway.message.RateLevel;
 
-class SerializerHelper {
+public class SerializerHelper {
 
     public static final NanoClock NANO_CLOCK = new SystemNanoClock();
     private static final MessageHeaderDecoder MESSAGE_HEADER_DECODER = new MessageHeaderDecoder();
@@ -38,11 +38,11 @@ class SerializerHelper {
     private static final MarketDataSnapshotDecoder MD_SNAPSHOT_DECODER = new MarketDataSnapshotDecoder();
     private static final MarketDataSnapshotEncoder MD_SNAPSHOT_ENCODER = new MarketDataSnapshotEncoder();
 
-    static MarketDataSnapshot givenMarketDataSnapshot(final MarketDataSnapshotBuilder builder) {
+    public static MarketDataSnapshot givenMarketDataSnapshot(final MarketDataSnapshotBuilder builder) {
         return givenMarketDataSnapshot(builder, 10, 10);
     }
 
-    static MarketDataSnapshot givenMarketDataSnapshot(final MarketDataSnapshotBuilder builder,
+    public static MarketDataSnapshot givenMarketDataSnapshot(final MarketDataSnapshotBuilder builder,
                                                       final int bids, final int asks) {
         final long triggerTimestamp = NANO_CLOCK.nanoTime();
         final long eventTimestamp = triggerTimestamp;
@@ -70,8 +70,7 @@ class SerializerHelper {
         return builder.build();
     }
 
-
-    static int encode(final UnsafeBuffer directBuffer,
+    public static int encode(final UnsafeBuffer directBuffer,
                       final MarketDataSnapshot fromSnapshot) {
         MESSAGE_HEADER_ENCODER
                 .wrap(directBuffer, 0)
@@ -102,7 +101,7 @@ class SerializerHelper {
     }
 
 
-    static MarketDataSnapshot decode(final UnsafeBuffer directBuffer, final MarketDataSnapshotBuilder builder) {
+    public static MarketDataSnapshot decode(final UnsafeBuffer directBuffer, final MarketDataSnapshotBuilder builder) {
         MESSAGE_HEADER_DECODER.wrap(directBuffer, 0);
 
         // Lookup the applicable flyweight to decode this type of message based on templateId and version.
