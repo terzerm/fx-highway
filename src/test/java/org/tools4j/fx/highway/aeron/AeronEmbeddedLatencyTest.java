@@ -38,7 +38,7 @@ import org.tools4j.fx.highway.message.MarketDataSnapshot;
 import org.tools4j.fx.highway.message.MarketDataSnapshotBuilder;
 import org.tools4j.fx.highway.message.MutableMarketDataSnapshot;
 import org.tools4j.fx.highway.message.SupplierFactory;
-import org.tools4j.fx.highway.sbe.SerializerHelper;
+import org.tools4j.fx.highway.util.SerializerHelper;
 
 import java.nio.ByteBuffer;
 import java.util.Arrays;
@@ -51,7 +51,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 
-import static org.tools4j.fx.highway.sbe.SerializerHelper.*;
+import static org.tools4j.fx.highway.util.SerializerHelper.*;
 
 @RunWith(Parameterized.class)
 public class AeronEmbeddedLatencyTest {

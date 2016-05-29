@@ -28,8 +28,10 @@ import io.aeron.Publication;
 import org.agrona.concurrent.NanoClock;
 import org.agrona.concurrent.SystemNanoClock;
 import org.agrona.concurrent.UnsafeBuffer;
+import org.tools4j.fx.highway.message.ImmutableMarketDataSnapshot;
 import org.tools4j.fx.highway.message.MarketDataSnapshot;
 import org.tools4j.fx.highway.message.MutableMarketDataSnapshot;
+import org.tools4j.fx.highway.util.SerializerHelper;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -37,8 +39,8 @@ import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
-import static org.tools4j.fx.highway.sbe.SerializerHelper.encode;
-import static org.tools4j.fx.highway.sbe.SerializerHelper.givenMarketDataSnapshot;
+import static org.tools4j.fx.highway.util.SerializerHelper.encode;
+import static org.tools4j.fx.highway.util.SerializerHelper.givenMarketDataSnapshot;
 
 /**
  * Starts the aeron publisher in a separate process.
@@ -50,13 +52,6 @@ public class AeronPublisher extends AbstractAeronProcess {
     private final long messageCount;
     private final long messagesPerSecond;
     private final int marketDataDepth;
-
-    public AeronPublisher(final String aeronDirectoryName,
-                          final long messageCount, final long messagesPerSecond,
-                          final int marketDataDepth) {
-        this(aeronDirectoryName, "udp://localhost:40123", 10,
-                messageCount, messagesPerSecond, marketDataDepth);
-    }
 
     public AeronPublisher(final String aeronDirectoryName,
                           final String channel, final int streamId,
@@ -114,6 +109,15 @@ public class AeronPublisher extends AbstractAeronProcess {
         final long messagesPerSecond = Long.parseLong(args[4]);
         final int marketDataDepth = Integer.parseInt(args[5]);
 
+        System.out.println("Started " + AeronPublisher.class.getSimpleName() + ":");
+        System.out.println("\tmessageCount      : " + messageCount);
+        System.out.println("\tchannel           : " + channel);
+        System.out.println("\tstreamId          : " + streamId);
+        System.out.println("\tmessagesPerSecond : " + messagesPerSecond);
+        System.out.println("\tmarketDataDepth   : " + marketDataDepth);
+        System.out.println("\tmessageSize       : " + encode(new UnsafeBuffer(new byte[1024]), givenMarketDataSnapshot(new ImmutableMarketDataSnapshot.Builder(), marketDataDepth, marketDataDepth)) + " bytes");
+        System.out.println();
+
         final Aeron aeron = aeron(aeronDirectoryName);
         final Publication publication = aeron.addPublication(channel, streamId);
         try {
@@ -140,8 +144,8 @@ public class AeronPublisher extends AbstractAeronProcess {
             while (tCur - t0 < cnt * periodNs) {
                 tCur = clock.nanoTime();
             }
-            final MarketDataSnapshot newSnapshot = givenMarketDataSnapshot(snapshot.builder(), marketDataDepth, marketDataDepth);
-            final int len = encode(unsafeBuffer, newSnapshot);
+            final MarketDataSnapshot newSnapshot = SerializerHelper.givenMarketDataSnapshot(snapshot.builder(), marketDataDepth, marketDataDepth);
+            final int len = SerializerHelper.encode(unsafeBuffer, newSnapshot);
             long pubres;
             do {
                 pubres = publication.offer(unsafeBuffer, 0, len);
@@ -153,7 +157,6 @@ public class AeronPublisher extends AbstractAeronProcess {
                     } else {
                         throw new RuntimeException("publication failed with pubres=" + pubres);
                     }
-                    Thread.yield();
                 }
             } while (pubres < 0);
             cnt++;

@@ -32,13 +32,12 @@ import org.agrona.concurrent.SystemNanoClock;
 import org.agrona.concurrent.UnsafeBuffer;
 import org.tools4j.fx.highway.message.MarketDataSnapshot;
 import org.tools4j.fx.highway.message.MutableMarketDataSnapshot;
+import org.tools4j.fx.highway.util.SerializerHelper;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
-
-import static org.tools4j.fx.highway.sbe.SerializerHelper.decode;
 
 /**
  * Starts the aeron publisher in a separate process.
@@ -49,11 +48,6 @@ public class AeronSubscriber extends AbstractAeronProcess {
     private final int streamId;
     private final long warmupCount;
     private final long measuredCount;
-
-    public AeronSubscriber(final String aeronDirectoryName,
-                           final long warmupCount, final long measuredCount) {
-        this(aeronDirectoryName, "udp://localhost:40123", 10, warmupCount, measuredCount);
-    }
 
     public AeronSubscriber(final String aeronDirectoryName,
                            final String channel, final int streamId,
@@ -108,6 +102,13 @@ public class AeronSubscriber extends AbstractAeronProcess {
         final long warmupCount = Long.parseLong(args[3]);
         final long measuredCount = Long.parseLong(args[4]);
 
+        System.out.println("Started " + AeronSubscriber.class.getSimpleName() + ":");
+        System.out.println("\twarmupCount       : " + warmupCount);
+        System.out.println("\tmeasuredCount     : " + measuredCount);
+        System.out.println("\tchannel           : " + channel);
+        System.out.println("\tstreamId          : " + streamId);
+        System.out.println();
+
         final Aeron aeron = aeron(aeronDirectoryName);
         final Subscription subscription = aeron.addSubscription(channel, streamId);
         try {
@@ -134,7 +135,7 @@ public class AeronSubscriber extends AbstractAeronProcess {
             else if (count.get() == warmupCount-1) t1.set(clock.nanoTime());
             else if (count.get() == n-1) t2.set(clock.nanoTime());
             unsafeBuffer.wrap(buf, offset, len);
-            final MarketDataSnapshot decoded = decode(unsafeBuffer, snapshot.builder());
+            final MarketDataSnapshot decoded = SerializerHelper.decode(unsafeBuffer, snapshot.builder());
             final long time = clock.nanoTime();
             if (count.incrementAndGet() <= n) {
                 histogram.recordValue(time - decoded.getEventTimestamp());

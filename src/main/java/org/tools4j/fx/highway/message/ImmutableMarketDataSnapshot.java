@@ -23,7 +23,6 @@
  */
 package org.tools4j.fx.highway.message;
 
-import com.google.common.base.Suppliers;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import org.tools4j.fx.highway.sbe.CurrencyPair;
@@ -32,7 +31,6 @@ import org.tools4j.fx.highway.sbe.Venue;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
-import java.util.function.Supplier;
 
 public class ImmutableMarketDataSnapshot implements MarketDataSnapshot {
 

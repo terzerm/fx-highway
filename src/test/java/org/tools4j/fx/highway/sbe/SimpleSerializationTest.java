@@ -31,7 +31,7 @@ import org.tools4j.fx.highway.message.MarketDataSnapshot;
 
 import java.nio.ByteBuffer;
 
-import static org.tools4j.fx.highway.sbe.SerializerHelper.*;
+import static org.tools4j.fx.highway.util.SerializerHelper.*;
 
 public class SimpleSerializationTest {
 

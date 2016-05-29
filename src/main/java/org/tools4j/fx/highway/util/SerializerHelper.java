@@ -21,7 +21,7 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package org.tools4j.fx.highway.sbe;
+package org.tools4j.fx.highway.util;
 
 import org.agrona.concurrent.NanoClock;
 import org.agrona.concurrent.SystemNanoClock;
@@ -29,6 +29,7 @@ import org.agrona.concurrent.UnsafeBuffer;
 import org.tools4j.fx.highway.message.MarketDataSnapshot;
 import org.tools4j.fx.highway.message.MarketDataSnapshotBuilder;
 import org.tools4j.fx.highway.message.RateLevel;
+import org.tools4j.fx.highway.sbe.*;
 
 public class SerializerHelper {
 
