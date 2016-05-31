@@ -106,13 +106,13 @@ public class SerializerHelper {
         MESSAGE_HEADER_DECODER.wrap(directBuffer, 0);
 
         // Lookup the applicable flyweight to decode this type of message based on templateId and version.
+        final int actingBlockLength = MESSAGE_HEADER_DECODER.blockLength();
         final int templateId = MESSAGE_HEADER_DECODER.templateId();
         if (templateId != MarketDataSnapshotEncoder.TEMPLATE_ID)
         {
             throw new IllegalStateException("Template ids do not match");
         }
 
-        final int actingBlockLength = MESSAGE_HEADER_DECODER.blockLength();
         final int schemaId = MESSAGE_HEADER_DECODER.schemaId(); //I don't use it yet
         final int actingVersion = MESSAGE_HEADER_DECODER.version();
 
