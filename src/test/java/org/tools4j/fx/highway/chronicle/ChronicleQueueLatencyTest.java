@@ -163,7 +163,7 @@ public class ChronicleQueueLatencyTest {
             while (!terminate.get()) {
                 try (final DocumentContext dc = chronicleQueue.getTailer().readingDocument()) {
                     if (dc.isPresent()) {
-                        dc.wire().read(() -> "msg").bytes(bytesOut);
+                        dc.wire().read().bytes(bytesOut);
                         consumer.accept(unsafeBuffer);
 //                        byteBuffer.position(0);
                     }
@@ -198,7 +198,7 @@ public class ChronicleQueueLatencyTest {
                 final MarketDataSnapshot newSnapshot = givenMarketDataSnapshot(builderSupplier.get(), marketDataDepth, marketDataDepth);
                 encode(unsafeBuffer, newSnapshot);
                 try (final DocumentContext dc = chronicleQueue.getAppender().writingDocument()) {
-                    dc.wire().write(() -> "msg").bytes(bytesStore);
+                    dc.wire().write().bytes(bytesStore);
                 }
                 cnt++;
             }
