@@ -21,10 +21,11 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package org.tools4j.fx.highway.aeron;
+package org.tools4j.fx.highway.chronicle;
 
-import io.aeron.Publication;
-import io.aeron.logbuffer.FragmentHandler;
+import net.openhft.chronicle.wire.DocumentContext;
+import net.openhft.chronicle.wire.ValueIn;
+import net.openhft.chronicle.wire.ValueOut;
 import org.HdrHistogram.Histogram;
 import org.agrona.concurrent.NanoClock;
 import org.agrona.concurrent.UnsafeBuffer;
@@ -34,62 +35,49 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.octtech.bw.ByteWatcher;
-import org.tools4j.fx.highway.message.MarketDataSnapshot;
-import org.tools4j.fx.highway.message.MarketDataSnapshotBuilder;
-import org.tools4j.fx.highway.message.MutableMarketDataSnapshot;
-import org.tools4j.fx.highway.message.SupplierFactory;
 import org.tools4j.fx.highway.util.SerializerHelper;
 
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.Supplier;
-
-import static org.tools4j.fx.highway.util.SerializerHelper.*;
+import java.util.function.Consumer;
 
 @RunWith(Parameterized.class)
-public class AeronEmbeddedLatencyTest {
+public class ChronicleQueuePubSubTest {
 
-    private final String channel;
     private final long messagesPerSecond;
     private final int marketDataDepth;
-    private final SupplierFactory<MarketDataSnapshotBuilder> builderSupplierFactory;
+    private final int numberOfBytes;
 
-    private EmbeddedAeron embeddedAeron;
+    private ChronicleQueue chronicleQueue;
     private ByteWatcher byteWatcher;
 
-    @Parameterized.Parameters(name = "{index}: CH={0}, MPS={1}, D={2}")
+    @Parameterized.Parameters(name = "{index}: CH={0}, MPS={1}, NBYTES={2}")
     public static Collection testRunParameters() {
         return Arrays.asList(new Object[][] {
-                { "aeron:ipc", 160000, 2, MutableMarketDataSnapshot.BUILDER_SUPPLIER_FACTORY },
-                { "aeron:ipc", 500000, 2, MutableMarketDataSnapshot.BUILDER_SUPPLIER_FACTORY },
-                { "udp://localhost:40123", 160000, 2, MutableMarketDataSnapshot.BUILDER_SUPPLIER_FACTORY },
-                { "udp://224.10.9.7:4050", 160000, 2, MutableMarketDataSnapshot.BUILDER_SUPPLIER_FACTORY}
+                { 160000, 2, 100 },
+                { 500000, 2, 100 }
         });
     }
 
-    public AeronEmbeddedLatencyTest(final String channel,
-                                    final long messagesPerSecond,
+    public ChronicleQueuePubSubTest(final long messagesPerSecond,
                                     final int marketDataDepth,
-                                    final SupplierFactory<MarketDataSnapshotBuilder> builderSupplierFactory) {
-        this.channel = Objects.requireNonNull(channel);
+                                    final int numberOfBytes) {
         this.messagesPerSecond = messagesPerSecond;
         this.marketDataDepth = marketDataDepth;
-        this.builderSupplierFactory = Objects.requireNonNull(builderSupplierFactory);
+        this.numberOfBytes = numberOfBytes;
     }
 
     @Before
     public void setup() {
-        embeddedAeron = new EmbeddedAeron(channel, 10);
-        embeddedAeron.awaitConnection(5, TimeUnit.SECONDS);
+        chronicleQueue = new ChronicleQueue();
 
         final long limit = 0;
         final Map<Thread, AtomicLong> lastSizePerThread = new ConcurrentHashMap<>();
@@ -105,9 +93,9 @@ public class AeronEmbeddedLatencyTest {
 
     @After
     public void tearDown() {
-        if (embeddedAeron != null) {
-            embeddedAeron.shutdown();
-            embeddedAeron = null;
+        if (chronicleQueue != null) {
+            chronicleQueue.close();
+            chronicleQueue = null;
         }
         if (byteWatcher != null) {
             byteWatcher.shutdown();
@@ -117,20 +105,17 @@ public class AeronEmbeddedLatencyTest {
 
     @Test
     public void latencyTest() throws Exception {
-        final MarketDataSnapshotBuilder builder = builderSupplierFactory.create().get();
-        System.out.println("Using " + builder.build().getClass().getSimpleName());
         //given
-        final int w = 1000000;//warmup
-        final int c = 200000;//counted
+        final int w = 200000;//warmup
+        final int c = 100000;//counted
         final int n = w+c;
-        final long maxTimeToRunSeconds = 60;
+        final long maxTimeToRunSeconds = 30;
         final UnsafeBuffer sizeBuf = new UnsafeBuffer(ByteBuffer.allocateDirect(4096));
 
-        System.out.println("\tchannel             : " + channel);
         System.out.println("\twarmup + count      : " + w + " + " + c + " = " + n);
         System.out.println("\tmessagesPerSecond   : " + messagesPerSecond);
         System.out.println("\tmarketDataDepth     : " + marketDataDepth);
-        System.out.println("\tmessageSize         : " + encode(sizeBuf, givenMarketDataSnapshot(builder, marketDataDepth, marketDataDepth)) + " bytes");
+        System.out.println("\tmessageSize         : " + numberOfBytes + " bytes");
         System.out.println("\tmaxTimeToRunSeconds : " + maxTimeToRunSeconds);
         System.out.println();
 
@@ -142,28 +127,36 @@ public class AeronEmbeddedLatencyTest {
 
         //when
         final Thread subscriberThread = new Thread(() -> {
-            final Supplier<MarketDataSnapshotBuilder> builderSupplier = builderSupplierFactory.create();
-            final UnsafeBuffer unsafeBuffer = new UnsafeBuffer(0, 0);
             final AtomicLong t0 = new AtomicLong();
             final AtomicLong t1 = new AtomicLong();
             final AtomicLong t2 = new AtomicLong();
-            final FragmentHandler fh = (buf, offset, len, header) -> {
-                if (count.get() == 0) t0.set(clock.nanoTime());
-                else if (count.get() == w-1) t1.set(clock.nanoTime());
-                else if (count.get() == n-1) t2.set(clock.nanoTime());
-                unsafeBuffer.wrap(buf, offset, len);
-                final MarketDataSnapshot decoded = decode(unsafeBuffer, builderSupplier.get());
-                final long time = clock.nanoTime();
-                final int cnt = count.incrementAndGet();
-                if (cnt <= n) {
-                    histogram.recordValue(time - decoded.getEventTimestamp());
-                }
-                if (cnt == w) {
-                    histogram.reset();
-                }
-            };
             while (!terminate.get()) {
-                embeddedAeron.getSubscription().poll(fh, 256);
+                try (final DocumentContext dc = chronicleQueue.getTailer().readingDocument()) {
+                    if (dc.isPresent()) {
+                        final ValueIn in = dc.wire().read();
+                        if (count.get() == 0) t0.set(clock.nanoTime());
+                        else if (count.get() == w-1) t1.set(clock.nanoTime());
+                        else if (count.get() == n-1) t2.set(clock.nanoTime());
+                        long sendTime = in.int64();
+                        for (int i = 8; i < numberOfBytes; ) {
+                            if (i + 8 < numberOfBytes) {
+                                in.int64();
+                                i += 8;
+                            } else {
+                                in.int8();
+                                i++;
+                            }
+                        }
+                        final long time = clock.nanoTime();
+                        final int cnt = count.incrementAndGet();
+                        if (cnt <= n) {
+                            histogram.recordValue(time - sendTime);
+                        }
+                        if (cnt == w) {
+                            histogram.reset();
+                        }
+                    }
+                }
                 if (count.get() >= n) {
                     subscriberLatch.countDown();
                     break;
@@ -171,38 +164,35 @@ public class AeronEmbeddedLatencyTest {
             }
             System.out.println((t2.get() - t0.get())/1000.0 + " us total receiving time (" + (t2.get() - t1.get())/(1000f*c) + " us/message, " + c/((t2.get()-t1.get())/1000000000f) + " messages/second)");
         });
+        subscriberThread.setName("subscriber-thread");
         subscriberThread.start();
 
         //publisher
         final Thread publisherThread = new Thread(() -> {
-            final Supplier<MarketDataSnapshotBuilder> builderSupplier = builderSupplierFactory.create();
-            final UnsafeBuffer unsafeBuffer = new UnsafeBuffer(ByteBuffer.allocateDirect(4096));
             final long periodNs = 1000000000/messagesPerSecond;
             long cntAdmin = 0;
             long cntBackp = 0;
             long cnt = 0;
             final long t0 = clock.nanoTime();
             while (cnt < n && !terminate.get()) {
-                long tCur = clock.nanoTime();
-                while (tCur - t0 < cnt * periodNs) {
-                    tCur = clock.nanoTime();
-                }
-                final MarketDataSnapshot newSnapshot = givenMarketDataSnapshot(builderSupplier.get(), marketDataDepth, marketDataDepth);
-                final int len = encode(unsafeBuffer, newSnapshot);
-                long pubres;
-                do {
-                    pubres = embeddedAeron.getPublication().offer(unsafeBuffer, 0, len);
-                    if (pubres < 0) {
-                        if (pubres == Publication.BACK_PRESSURED) {
-                            cntBackp++;
-                        } else if (pubres == Publication.ADMIN_ACTION) {
-                            cntAdmin++;
+//                long tCur = clock.nanoTime();
+//                while (tCur - t0 < cnt * periodNs) {
+//                    tCur = clock.nanoTime();
+//                }
+                try (final DocumentContext dc = chronicleQueue.getAppender().writingDocument()) {
+                    final long time = clock.nanoTime();
+                    final ValueOut out = dc.wire().write();
+                    out.int64(time);
+                    for (int i = 8; i < numberOfBytes; ) {
+                        if (i + 8 < numberOfBytes) {
+                            out.int64(time + i);
+                            i += 8;
                         } else {
-                            throw new RuntimeException("publication failed with pubres=" + pubres);
+                            out.int8(0x7f & (time + i));
+                            i++;
                         }
-                        Thread.yield();
                     }
-                } while (pubres < 0);
+                }
                 cnt++;
             }
             final long t1 = clock.nanoTime();
@@ -235,12 +225,12 @@ public class AeronEmbeddedLatencyTest {
     }
 
     public static void main(String... args) throws Exception {
-        final AeronEmbeddedLatencyTest aeronLatencyTest = new AeronEmbeddedLatencyTest("udp://224.10.9.7:4050", 160000, 6, MutableMarketDataSnapshot.BUILDER_SUPPLIER_FACTORY);
-        aeronLatencyTest.setup();
+        final ChronicleQueuePubSubTest chronicleQueueLatencyTest = new ChronicleQueuePubSubTest(160000, 2, 94);
+        chronicleQueueLatencyTest.setup();
         try {
-            aeronLatencyTest.latencyTest();
+            chronicleQueueLatencyTest.latencyTest();
         } finally {
-            aeronLatencyTest.tearDown();
+            chronicleQueueLatencyTest.tearDown();
         }
     }
 }

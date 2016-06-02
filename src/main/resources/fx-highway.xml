@@ -51,6 +51,14 @@
         <type name="Currency" primitiveType="char" length="3" characterEncoding="ASCII"/>
         <type name="Rate" primitiveType="double"/>
         <type name="Quantity" primitiveType="double"/>
+        <set name="Flags" encodingType="uint8">
+            <choice name="latent">0</choice>
+            <choice name="selfCrossing">1</choice>
+            <choice name="aggregateCrossing">2</choice>
+            <choice name="blackListed">2</choice>
+            <choice name="speedHumped">2</choice>
+            <choice name="categoryExcluded">2</choice>
+        </set>
     </types>
     <sbe:message name="MarketDataSnapshot" id="1">
         <field name="triggerTimestamp" id="1" type="Timestamp"/>
@@ -64,6 +72,23 @@
         <group name="asks" id="8" dimensionType="groupSizeEncoding">
             <field name="quantity" id="9" type="Quantity"/>
             <field name="rate" id="10" type="Rate"/>
+        </group>
+    </sbe:message>
+    <sbe:message name="AggregatedSnapshot" id="2">
+        <field name="triggerTimestamp" id="1" type="Timestamp"/>
+        <field name="eventTimestamp" id="2" type="Timestamp"/>
+        <field name="currencyPair" id="3" type="CurrencyPair"/>
+        <group name="bids" id="4" dimensionType="groupSizeEncoding">
+            <field name="venue" id="5" type="Venue"/>
+            <field name="quantity" id="6" type="Quantity"/>
+            <field name="rate" id="7" type="Rate"/>
+            <field name="flags" id="8" type="Flags"/>
+        </group>
+        <group name="asks" id="9" dimensionType="groupSizeEncoding">
+            <field name="venue" id="10" type="Venue"/>
+            <field name="quantity" id="11" type="Quantity"/>
+            <field name="rate" id="12" type="Rate"/>
+            <field name="flags" id="13" type="Flags"/>
         </group>
     </sbe:message>
 </sbe:messageSchema>
