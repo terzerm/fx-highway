@@ -23,12 +23,10 @@
  */
 package org.tools4j.fx.highway.chronicle;
 
-import net.openhft.chronicle.wire.DocumentContext;
-import net.openhft.chronicle.wire.ValueIn;
-import net.openhft.chronicle.wire.ValueOut;
+import net.openhft.chronicle.ExcerptAppender;
+import net.openhft.chronicle.ExcerptTailer;
 import org.HdrHistogram.Histogram;
 import org.agrona.concurrent.NanoClock;
-import org.agrona.concurrent.UnsafeBuffer;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -37,7 +35,6 @@ import org.junit.runners.Parameterized;
 import org.octtech.bw.ByteWatcher;
 import org.tools4j.fx.highway.util.SerializerHelper;
 
-import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Map;
@@ -47,13 +44,11 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.Consumer;
 
 @RunWith(Parameterized.class)
 public class ChronicleQueuePubSubTest {
 
     private final long messagesPerSecond;
-    private final int marketDataDepth;
     private final int numberOfBytes;
 
     private ChronicleQueue chronicleQueue;
@@ -62,21 +57,19 @@ public class ChronicleQueuePubSubTest {
     @Parameterized.Parameters(name = "{index}: CH={0}, MPS={1}, NBYTES={2}")
     public static Collection testRunParameters() {
         return Arrays.asList(new Object[][] {
-                { 160000, 2, 100 },
-                { 500000, 2, 100 }
+                { 160000, 100 },
+                { 500000, 100 }
         });
     }
 
     public ChronicleQueuePubSubTest(final long messagesPerSecond,
-                                    final int marketDataDepth,
                                     final int numberOfBytes) {
         this.messagesPerSecond = messagesPerSecond;
-        this.marketDataDepth = marketDataDepth;
         this.numberOfBytes = numberOfBytes;
     }
 
     @Before
-    public void setup() {
+    public void setup() throws Exception {
         chronicleQueue = new ChronicleQueue();
 
         final long limit = 0;
@@ -92,7 +85,7 @@ public class ChronicleQueuePubSubTest {
     }
 
     @After
-    public void tearDown() {
+    public void tearDown() throws Exception {
         if (chronicleQueue != null) {
             chronicleQueue.close();
             chronicleQueue = null;
@@ -106,60 +99,63 @@ public class ChronicleQueuePubSubTest {
     @Test
     public void latencyTest() throws Exception {
         //given
+        final long histogramMax = TimeUnit.SECONDS.toNanos(1);
         final int w = 200000;//warmup
-        final int c = 100000;//counted
+        final int c = 1000000;//counted
         final int n = w+c;
         final long maxTimeToRunSeconds = 30;
-        final UnsafeBuffer sizeBuf = new UnsafeBuffer(ByteBuffer.allocateDirect(4096));
 
         System.out.println("\twarmup + count      : " + w + " + " + c + " = " + n);
         System.out.println("\tmessagesPerSecond   : " + messagesPerSecond);
-        System.out.println("\tmarketDataDepth     : " + marketDataDepth);
         System.out.println("\tmessageSize         : " + numberOfBytes + " bytes");
         System.out.println("\tmaxTimeToRunSeconds : " + maxTimeToRunSeconds);
         System.out.println();
 
         final AtomicBoolean terminate = new AtomicBoolean(false);
         final NanoClock clock = SerializerHelper.NANO_CLOCK;
-        final Histogram histogram = new Histogram(1, 1000000000, 3);
+        final Histogram histogram = new Histogram(1, histogramMax, 3);
         final CountDownLatch subscriberLatch = new CountDownLatch(1);
         final AtomicInteger count = new AtomicInteger();
 
         //when
         final Thread subscriberThread = new Thread(() -> {
+            final ExcerptTailer tailer = chronicleQueue.getTailer();
             final AtomicLong t0 = new AtomicLong();
             final AtomicLong t1 = new AtomicLong();
             final AtomicLong t2 = new AtomicLong();
             while (!terminate.get()) {
-                try (final DocumentContext dc = chronicleQueue.getTailer().readingDocument()) {
-                    if (dc.isPresent()) {
-                        final ValueIn in = dc.wire().read();
-                        if (count.get() == 0) t0.set(clock.nanoTime());
-                        else if (count.get() == w-1) t1.set(clock.nanoTime());
-                        else if (count.get() == n-1) t2.set(clock.nanoTime());
-                        long sendTime = in.int64();
-                        for (int i = 8; i < numberOfBytes; ) {
-                            if (i + 8 < numberOfBytes) {
-                                in.int64();
-                                i += 8;
-                            } else {
-                                in.int8();
-                                i++;
-                            }
-                        }
-                        final long time = clock.nanoTime();
-                        final int cnt = count.incrementAndGet();
-                        if (cnt <= n) {
-                            histogram.recordValue(time - sendTime);
-                        }
-                        if (cnt == w) {
-                            histogram.reset();
+                if (tailer.nextIndex()) {
+                    if (count.get() == 0) t0.set(clock.nanoTime());
+                    else if (count.get() == w-1) t1.set(clock.nanoTime());
+                    else if (count.get() == n-1) t2.set(clock.nanoTime());
+                    long sendTime = tailer.readLong();
+                    for (int i = 8; i < numberOfBytes; ) {
+                        if (i + 8 <= numberOfBytes) {
+                            tailer.readLong();
+                            i += 8;
+                        } else {
+                            tailer.readByte();
+                            i++;
                         }
                     }
-                }
-                if (count.get() >= n) {
-                    subscriberLatch.countDown();
-                    break;
+                    tailer.finish();
+                    final long time = clock.nanoTime();
+                    final int cnt = count.incrementAndGet();
+                    if (cnt <= n) {
+                        if (time - sendTime > histogramMax) {
+                            //throw new RuntimeException("bad data in message " + cnt + ": time=" + time + ", sendTime=" + sendTime + ", dt=" + (time - sendTime));
+                            histogram.recordValue(histogramMax);
+                        } else {
+                            histogram.recordValue(time - sendTime);
+                        }
+                    }
+                    if (cnt == w) {
+                        histogram.reset();
+                    }
+                    if (count.get() >= n) {
+                        subscriberLatch.countDown();
+                        break;
+                    }
                 }
             }
             System.out.println((t2.get() - t0.get())/1000.0 + " us total receiving time (" + (t2.get() - t1.get())/(1000f*c) + " us/message, " + c/((t2.get()-t1.get())/1000000000f) + " messages/second)");
@@ -169,30 +165,30 @@ public class ChronicleQueuePubSubTest {
 
         //publisher
         final Thread publisherThread = new Thread(() -> {
+            final ExcerptAppender appender = chronicleQueue.getAppender();
             final long periodNs = 1000000000/messagesPerSecond;
             long cntAdmin = 0;
             long cntBackp = 0;
             long cnt = 0;
             final long t0 = clock.nanoTime();
             while (cnt < n && !terminate.get()) {
-//                long tCur = clock.nanoTime();
-//                while (tCur - t0 < cnt * periodNs) {
-//                    tCur = clock.nanoTime();
-//                }
-                try (final DocumentContext dc = chronicleQueue.getAppender().writingDocument()) {
-                    final long time = clock.nanoTime();
-                    final ValueOut out = dc.wire().write();
-                    out.int64(time);
-                    for (int i = 8; i < numberOfBytes; ) {
-                        if (i + 8 < numberOfBytes) {
-                            out.int64(time + i);
-                            i += 8;
-                        } else {
-                            out.int8(0x7f & (time + i));
-                            i++;
-                        }
+                long tCur = clock.nanoTime();
+                while (tCur - t0 < cnt * periodNs) {
+                    tCur = clock.nanoTime();
+                }
+                final long time = clock.nanoTime();
+                appender.startExcerpt(numberOfBytes);
+                appender.writeLong(time);
+                for (int i = 8; i < numberOfBytes; ) {
+                    if (i + 8 <= numberOfBytes) {
+                        appender.writeLong(time + i);
+                        i += 8;
+                    } else {
+                        appender.writeByte((byte)(time + i));
+                        i++;
                     }
                 }
+                appender.finish();
                 cnt++;
             }
             final long t1 = clock.nanoTime();
@@ -225,7 +221,7 @@ public class ChronicleQueuePubSubTest {
     }
 
     public static void main(String... args) throws Exception {
-        final ChronicleQueuePubSubTest chronicleQueueLatencyTest = new ChronicleQueuePubSubTest(160000, 2, 94);
+        final ChronicleQueuePubSubTest chronicleQueueLatencyTest = new ChronicleQueuePubSubTest(160000, 94);
         chronicleQueueLatencyTest.setup();
         try {
             chronicleQueueLatencyTest.latencyTest();

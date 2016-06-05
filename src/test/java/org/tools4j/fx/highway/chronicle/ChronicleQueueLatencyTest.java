@@ -23,10 +23,8 @@
  */
 package org.tools4j.fx.highway.chronicle;
 
-import net.openhft.chronicle.bytes.Bytes;
-import net.openhft.chronicle.bytes.BytesOut;
-import net.openhft.chronicle.bytes.BytesStore;
-import net.openhft.chronicle.wire.DocumentContext;
+import net.openhft.chronicle.ExcerptAppender;
+import net.openhft.chronicle.ExcerptTailer;
 import org.HdrHistogram.Histogram;
 import org.agrona.concurrent.NanoClock;
 import org.agrona.concurrent.UnsafeBuffer;
@@ -85,7 +83,7 @@ public class ChronicleQueueLatencyTest {
     }
 
     @Before
-    public void setup() {
+    public void setup() throws Exception {
         chronicleQueue = new ChronicleQueue();
 
         final long limit = 0;
@@ -101,7 +99,7 @@ public class ChronicleQueueLatencyTest {
     }
 
     @After
-    public void tearDown() {
+    public void tearDown() throws Exception {
         if (chronicleQueue != null) {
             chronicleQueue.close();
             chronicleQueue = null;
@@ -120,7 +118,7 @@ public class ChronicleQueueLatencyTest {
         final int w = 200000;//warmup
         final int c = 1000000;//counted
         final int n = w+c;
-        final long maxTimeToRunSeconds = 30;
+        final long maxTimeToRunSeconds = 15;
         final UnsafeBuffer sizeBuf = new UnsafeBuffer(ByteBuffer.allocateDirect(4096));
 
         System.out.println("\twarmup + count      : " + w + " + " + c + " = " + n);
@@ -139,6 +137,7 @@ public class ChronicleQueueLatencyTest {
         //when
         final Thread subscriberThread = new Thread(() -> {
             final Supplier<MarketDataSnapshotBuilder> builderSupplier = builderSupplierFactory.create();
+            final ExcerptTailer tailer = chronicleQueue.getTailer();
             final AtomicLong t0 = new AtomicLong();
             final AtomicLong t1 = new AtomicLong();
             final AtomicLong t2 = new AtomicLong();
@@ -157,20 +156,28 @@ public class ChronicleQueueLatencyTest {
                 }
             };
             final ByteBuffer byteBuffer = ByteBuffer.allocateDirect(4096);
-            final BytesOut<?> bytesOut = Bytes.wrapForWrite(byteBuffer);
             final UnsafeBuffer unsafeBuffer = new UnsafeBuffer(0, 0);
             unsafeBuffer.wrap(byteBuffer);
             while (!terminate.get()) {
-                try (final DocumentContext dc = chronicleQueue.getTailer().readingDocument()) {
-                    if (dc.isPresent()) {
-                        dc.wire().read().bytes(bytesOut);
-                        consumer.accept(unsafeBuffer);
-//                        byteBuffer.position(0);
+                if (tailer.nextIndex()) {
+                    final int len = tailer.length();
+                    for (int i = 0; i < len; ) {
+                        if (i + 8 <= len) {
+                            byteBuffer.putLong(tailer.readLong());
+                            i += 8;
+                        } else {
+                            byteBuffer.put(tailer.readByte());
+                            i++;
+                        }
                     }
-                }
-                if (count.get() >= n) {
-                    subscriberLatch.countDown();
-                    break;
+                    byteBuffer.position(0);
+                    tailer.finish();
+                    consumer.accept(unsafeBuffer);
+//                        byteBuffer.position(0);
+                    if (count.get() >= n) {
+                        subscriberLatch.countDown();
+                        break;
+                    }
                 }
             }
             System.out.println((t2.get() - t0.get())/1000.0 + " us total receiving time (" + (t2.get() - t1.get())/(1000f*c) + " us/message, " + c/((t2.get()-t1.get())/1000000000f) + " messages/second)");
@@ -181,8 +188,8 @@ public class ChronicleQueueLatencyTest {
         //publisher
         final Thread publisherThread = new Thread(() -> {
             final Supplier<MarketDataSnapshotBuilder> builderSupplier = builderSupplierFactory.create();
+            final ExcerptAppender appender = chronicleQueue.getAppender();
             final ByteBuffer byteBuffer = ByteBuffer.allocateDirect(4096);
-            final BytesStore<?, ?> bytesStore = BytesStore.wrap(byteBuffer);
             final UnsafeBuffer unsafeBuffer = new UnsafeBuffer(0, 0);
             unsafeBuffer.wrap(byteBuffer);
             final long periodNs = 1000000000/messagesPerSecond;
@@ -196,10 +203,23 @@ public class ChronicleQueueLatencyTest {
                     tCur = clock.nanoTime();
                 }
                 final MarketDataSnapshot newSnapshot = givenMarketDataSnapshot(builderSupplier.get(), marketDataDepth, marketDataDepth);
-                encode(unsafeBuffer, newSnapshot);
-                try (final DocumentContext dc = chronicleQueue.getAppender().writingDocument()) {
-                    dc.wire().write().bytes(bytesStore);
+                final int len = encode(unsafeBuffer, newSnapshot);
+                appender.startExcerpt(len);
+                try {
+                    for (int i = 0; i < len; ) {
+                        if (i + 8 <= len) {
+                            appender.writeLong(byteBuffer.getLong());
+                            i += 8;
+                        } else {
+                            appender.writeByte(byteBuffer.get());
+                            i++;
+                        }
+                    }
+                    byteBuffer.position(0);
+                } catch (Exception e) {
+                    throw new RuntimeException("msg " + cnt + " failed, e=" + e, e);
                 }
+                appender.finish();
                 cnt++;
             }
             final long t1 = clock.nanoTime();

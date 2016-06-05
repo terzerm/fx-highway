@@ -23,32 +23,46 @@
  */
 package org.tools4j.fx.highway.chronicle;
 
-import net.openhft.chronicle.queue.ChronicleQueueBuilder;
-import net.openhft.chronicle.queue.ExcerptAppender;
-import net.openhft.chronicle.queue.ExcerptTailer;
+import net.openhft.chronicle.Chronicle;
+import net.openhft.chronicle.ChronicleQueueBuilder;
+import net.openhft.chronicle.ExcerptAppender;
+import net.openhft.chronicle.ExcerptTailer;
 
 import java.io.File;
+import java.io.IOException;
 
 /**
  * Created by terz on 31/05/2016.
  */
 public class ChronicleQueue {
 
-    private net.openhft.chronicle.queue.ChronicleQueue queue;
+    private Chronicle queue;
     private ExcerptAppender appender;
     private ExcerptTailer tailer;
 
-    public ChronicleQueue() {
+    public ChronicleQueue() throws IOException {
+        final File tmpDir= new File(System.getProperty("java.io.tmpdir"));
         final File basePath = new File(System.getProperty("java.io.tmpdir"), "chronicle");
-        if (basePath.exists()) {
-            for (final File file : basePath.listFiles()) {
-                file.delete();
+        for (final File file : tmpDir.listFiles()) {
+            if (file.getCanonicalPath().startsWith(basePath.getCanonicalPath())) {
+                deleteRecursively(file);
             }
         }
 
-        this.queue = ChronicleQueueBuilder.single(basePath.getPath()).build();
+        this.queue = ChronicleQueueBuilder.indexed(basePath.getPath()).build();
         this.appender = queue.createAppender();
         this.tailer = queue.createTailer();
+    }
+
+    private static void deleteRecursively(final File file) throws IOException {
+        if (file.isDirectory()) {
+            for (File sub : file.listFiles()) {
+                deleteRecursively(sub);
+            }
+        }
+        if (!file.delete()) {
+            throw new IOException("could not delete: " + file.getAbsolutePath());
+        }
     }
 
     public ExcerptAppender getAppender() {
@@ -59,7 +73,7 @@ public class ChronicleQueue {
         return tailer;
     }
 
-    public void close() {
+    public void close() throws IOException {
         appender = null;
         tailer = null;
         queue.close();
