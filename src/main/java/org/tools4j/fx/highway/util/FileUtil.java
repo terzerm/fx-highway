@@ -21,47 +21,36 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package org.tools4j.fx.highway.chronicle;
-
-import net.openhft.chronicle.Chronicle;
-import net.openhft.chronicle.ChronicleQueueBuilder;
-import net.openhft.chronicle.ExcerptAppender;
-import net.openhft.chronicle.ExcerptTailer;
-import org.tools4j.fx.highway.util.FileUtil;
+package org.tools4j.fx.highway.util;
 
 import java.io.File;
 import java.io.IOException;
 
-/**
- * Created by terz on 31/05/2016.
- */
-public class ChronicleQueue {
+public class FileUtil {
 
-    private Chronicle queue;
-    private ExcerptAppender appender;
-    private ExcerptTailer tailer;
+    public static final File IO_TMPDIR = new File(System.getProperty("java.io.tmpdir"));
 
-    public ChronicleQueue() throws IOException {
-        FileUtil.deleteTmpDirFilesMatching("chronicle-queue");
-        final File basePath = FileUtil.tmpDirFile("chronicle-queue");
-
-        this.queue = ChronicleQueueBuilder.indexed(basePath.getPath()).build();
-        this.appender = queue.createAppender();
-        this.tailer = queue.createTailer();
+    public static File tmpDirFile(final String name) {
+        return new File(IO_TMPDIR, name);
     }
 
-    public ExcerptAppender getAppender() {
-        return appender;
+    public static void deleteTmpDirFilesMatching(final String namePrefix) throws IOException {
+        deleteFilesMatching(IO_TMPDIR, namePrefix);
+    }
+    public static void deleteFilesMatching(final File dir, final String namePrefix) throws IOException {
+        for (final File file : dir.listFiles((d, n) -> n.startsWith(namePrefix))) {
+            deleteRecursively(file);
+        }
     }
 
-    public ExcerptTailer getTailer() {
-        return tailer;
-    }
-
-    public void close() throws IOException {
-        appender = null;
-        tailer = null;
-        queue.close();
-        queue = null;
+    public static void deleteRecursively(final File file) throws IOException {
+        if (file.isDirectory()) {
+            for (File sub : file.listFiles()) {
+                deleteRecursively(sub);
+            }
+        }
+        if (!file.delete()) {
+            throw new IOException("could not delete: " + file.getAbsolutePath());
+        }
     }
 }

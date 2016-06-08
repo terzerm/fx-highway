@@ -120,7 +120,7 @@ public class AeronEmbeddedLatencyTest {
         final MarketDataSnapshotBuilder builder = builderSupplierFactory.create().get();
         System.out.println("Using " + builder.build().getClass().getSimpleName());
         //given
-        final int w = 1000000;//warmup
+        final int w = 100000;//warmup
         final int c = 200000;//counted
         final int n = w+c;
         final long maxTimeToRunSeconds = 60;

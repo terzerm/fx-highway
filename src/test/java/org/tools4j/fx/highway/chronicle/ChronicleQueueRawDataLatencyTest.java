@@ -27,59 +27,45 @@ import net.openhft.chronicle.ExcerptAppender;
 import net.openhft.chronicle.ExcerptTailer;
 import org.HdrHistogram.Histogram;
 import org.agrona.concurrent.NanoClock;
-import org.agrona.concurrent.UnsafeBuffer;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.octtech.bw.ByteWatcher;
-import org.tools4j.fx.highway.message.MarketDataSnapshot;
-import org.tools4j.fx.highway.message.MarketDataSnapshotBuilder;
-import org.tools4j.fx.highway.message.MutableMarketDataSnapshot;
-import org.tools4j.fx.highway.message.SupplierFactory;
 import org.tools4j.fx.highway.util.SerializerHelper;
 
-import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.Consumer;
-import java.util.function.Supplier;
-
-import static org.tools4j.fx.highway.util.SerializerHelper.*;
 
 @RunWith(Parameterized.class)
-public class ChronicleQueueLatencyTest {
+public class ChronicleQueueRawDataLatencyTest {
 
     private final long messagesPerSecond;
-    private final int marketDataDepth;
-    private final SupplierFactory<MarketDataSnapshotBuilder> builderSupplierFactory;
+    private final int numberOfBytes;
 
     private ChronicleQueue chronicleQueue;
     private ByteWatcher byteWatcher;
 
-    @Parameterized.Parameters(name = "{index}: CH={0}, MPS={1}, D={2}")
+    @Parameterized.Parameters(name = "{index}: CH={0}, MPS={1}, NBYTES={2}")
     public static Collection testRunParameters() {
         return Arrays.asList(new Object[][] {
-                { 160000, 2, MutableMarketDataSnapshot.BUILDER_SUPPLIER_FACTORY },
-                { 500000, 2, MutableMarketDataSnapshot.BUILDER_SUPPLIER_FACTORY }
+                { 160000, 100 },
+                { 500000, 100 }
         });
     }
 
-    public ChronicleQueueLatencyTest(final long messagesPerSecond,
-                                     final int marketDataDepth,
-                                     final SupplierFactory<MarketDataSnapshotBuilder> builderSupplierFactory) {
+    public ChronicleQueueRawDataLatencyTest(final long messagesPerSecond,
+                                            final int numberOfBytes) {
         this.messagesPerSecond = messagesPerSecond;
-        this.marketDataDepth = marketDataDepth;
-        this.builderSupplierFactory = Objects.requireNonNull(builderSupplierFactory);
+        this.numberOfBytes = numberOfBytes;
     }
 
     @Before
@@ -112,67 +98,60 @@ public class ChronicleQueueLatencyTest {
 
     @Test
     public void latencyTest() throws Exception {
-        final MarketDataSnapshotBuilder builder = builderSupplierFactory.create().get();
-        System.out.println("Using " + builder.build().getClass().getSimpleName());
         //given
+        final long histogramMax = TimeUnit.SECONDS.toNanos(1);
         final int w = 200000;//warmup
         final int c = 100000;//counted
         final int n = w+c;
-        final long maxTimeToRunSeconds = 15;
-        final UnsafeBuffer sizeBuf = new UnsafeBuffer(ByteBuffer.allocateDirect(4096));
+        final long maxTimeToRunSeconds = 30;
 
         System.out.println("\twarmup + count      : " + w + " + " + c + " = " + n);
         System.out.println("\tmessagesPerSecond   : " + messagesPerSecond);
-        System.out.println("\tmarketDataDepth     : " + marketDataDepth);
-        System.out.println("\tmessageSize         : " + encode(sizeBuf, givenMarketDataSnapshot(builder, marketDataDepth, marketDataDepth)) + " bytes");
+        System.out.println("\tmessageSize         : " + numberOfBytes + " bytes");
         System.out.println("\tmaxTimeToRunSeconds : " + maxTimeToRunSeconds);
         System.out.println();
 
         final AtomicBoolean terminate = new AtomicBoolean(false);
         final NanoClock clock = SerializerHelper.NANO_CLOCK;
-        final Histogram histogram = new Histogram(1, 1000000000, 3);
+        final Histogram histogram = new Histogram(1, histogramMax, 3);
         final CountDownLatch subscriberLatch = new CountDownLatch(1);
         final AtomicInteger count = new AtomicInteger();
 
         //when
         final Thread subscriberThread = new Thread(() -> {
-            final Supplier<MarketDataSnapshotBuilder> builderSupplier = builderSupplierFactory.create();
             final ExcerptTailer tailer = chronicleQueue.getTailer();
             final AtomicLong t0 = new AtomicLong();
             final AtomicLong t1 = new AtomicLong();
             final AtomicLong t2 = new AtomicLong();
-            final Consumer<UnsafeBuffer> consumer = (buf) -> {
-                if (count.get() == 0) t0.set(clock.nanoTime());
-                else if (count.get() == w-1) t1.set(clock.nanoTime());
-                else if (count.get() == n-1) t2.set(clock.nanoTime());
-                final MarketDataSnapshot decoded = decode(buf, builderSupplier.get());
-                final long time = clock.nanoTime();
-                final int cnt = count.incrementAndGet();
-                if (cnt <= n) {
-                    histogram.recordValue(time - decoded.getEventTimestamp());
-                }
-                if (cnt == w) {
-                    histogram.reset();
-                }
-            };
-            final ByteBuffer byteBuffer = ByteBuffer.allocateDirect(4096);
-            final UnsafeBuffer unsafeBuffer = new UnsafeBuffer(0, 0);
-            unsafeBuffer.wrap(byteBuffer);
             while (!terminate.get()) {
                 if (tailer.nextIndex()) {
-                    final int len = tailer.length();
-                    for (int i = 0; i < len; ) {
-                        if (i + 8 <= len) {
-                            byteBuffer.putLong(tailer.readLong());
+                    if (count.get() == 0) t0.set(clock.nanoTime());
+                    else if (count.get() == w-1) t1.set(clock.nanoTime());
+                    else if (count.get() == n-1) t2.set(clock.nanoTime());
+                    long sendTime = tailer.readLong();
+                    for (int i = 8; i < numberOfBytes; ) {
+                        if (i + 8 <= numberOfBytes) {
+                            tailer.readLong();
                             i += 8;
                         } else {
-                            byteBuffer.put(tailer.readByte());
+                            tailer.readByte();
                             i++;
                         }
                     }
-                    byteBuffer.position(0);
                     tailer.finish();
-                    consumer.accept(unsafeBuffer);
+                    final long time = clock.nanoTime();
+                    final int cnt = count.incrementAndGet();
+                    if (cnt <= n) {
+                        if (time - sendTime > histogramMax) {
+                            //throw new RuntimeException("bad data in message " + cnt + ": time=" + time + ", sendTime=" + sendTime + ", dt=" + (time - sendTime));
+                            histogram.recordValue(histogramMax);
+                        } else {
+                            histogram.recordValue(time - sendTime);
+                        }
+                    }
+                    if (cnt == w) {
+                        histogram.reset();
+                    }
                     if (count.get() >= n) {
                         subscriberLatch.countDown();
                         break;
@@ -186,11 +165,7 @@ public class ChronicleQueueLatencyTest {
 
         //publisher
         final Thread publisherThread = new Thread(() -> {
-            final Supplier<MarketDataSnapshotBuilder> builderSupplier = builderSupplierFactory.create();
             final ExcerptAppender appender = chronicleQueue.getAppender();
-            final ByteBuffer byteBuffer = ByteBuffer.allocateDirect(4096);
-            final UnsafeBuffer unsafeBuffer = new UnsafeBuffer(0, 0);
-            unsafeBuffer.wrap(byteBuffer);
             final long periodNs = 1000000000/messagesPerSecond;
             long cntAdmin = 0;
             long cntBackp = 0;
@@ -201,22 +176,17 @@ public class ChronicleQueueLatencyTest {
                 while (tCur - t0 < cnt * periodNs) {
                     tCur = clock.nanoTime();
                 }
-                final MarketDataSnapshot newSnapshot = givenMarketDataSnapshot(builderSupplier.get(), marketDataDepth, marketDataDepth);
-                final int len = encode(unsafeBuffer, newSnapshot);
-                appender.startExcerpt(len);
-                try {
-                    for (int i = 0; i < len; ) {
-                        if (i + 8 <= len) {
-                            appender.writeLong(byteBuffer.getLong());
-                            i += 8;
-                        } else {
-                            appender.writeByte(byteBuffer.get());
-                            i++;
-                        }
+                final long time = clock.nanoTime();
+                appender.startExcerpt(numberOfBytes);
+                appender.writeLong(time);
+                for (int i = 8; i < numberOfBytes; ) {
+                    if (i + 8 <= numberOfBytes) {
+                        appender.writeLong(time + i);
+                        i += 8;
+                    } else {
+                        appender.writeByte((byte)(time + i));
+                        i++;
                     }
-                    byteBuffer.position(0);
-                } catch (Exception e) {
-                    throw new RuntimeException("msg " + cnt + " failed, e=" + e, e);
                 }
                 appender.finish();
                 cnt++;
@@ -251,7 +221,7 @@ public class ChronicleQueueLatencyTest {
     }
 
     public static void main(String... args) throws Exception {
-        final ChronicleQueueLatencyTest chronicleQueueLatencyTest = new ChronicleQueueLatencyTest(160000, 2, MutableMarketDataSnapshot.BUILDER_SUPPLIER_FACTORY);
+        final ChronicleQueueRawDataLatencyTest chronicleQueueLatencyTest = new ChronicleQueueRawDataLatencyTest(160000, 94);
         chronicleQueueLatencyTest.setup();
         try {
             chronicleQueueLatencyTest.latencyTest();

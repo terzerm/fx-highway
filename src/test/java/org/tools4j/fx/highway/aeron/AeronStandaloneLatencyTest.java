@@ -66,7 +66,7 @@ public class AeronStandaloneLatencyTest {
 
     @Test
     public void latencyTest() throws Exception {
-        latencyTestRunner = new AeronStandaloneLatencyTestRunner(channel, 10, messagesPerSecond, 200000, 1000000, marketDataDepth);
+        latencyTestRunner = new AeronStandaloneLatencyTestRunner(channel, 10, messagesPerSecond, 200000, 100000, marketDataDepth);
         latencyTestRunner.start();
         try {
             Thread.sleep(5000);//give some time for media driver to become ready

@@ -25,42 +25,31 @@ package org.tools4j.fx.highway.chronicle;
 
 import net.openhft.chronicle.Chronicle;
 import net.openhft.chronicle.ChronicleQueueBuilder;
-import net.openhft.chronicle.ExcerptAppender;
-import net.openhft.chronicle.ExcerptTailer;
 import org.tools4j.fx.highway.util.FileUtil;
 
 import java.io.File;
 import java.io.IOException;
 
-/**
- * Created by terz on 31/05/2016.
- */
-public class ChronicleQueue {
+public class ChronicleSink {
 
     private Chronicle queue;
-    private ExcerptAppender appender;
-    private ExcerptTailer tailer;
 
-    public ChronicleQueue() throws IOException {
-        FileUtil.deleteTmpDirFilesMatching("chronicle-queue");
-        final File basePath = FileUtil.tmpDirFile("chronicle-queue");
-
-        this.queue = ChronicleQueueBuilder.indexed(basePath.getPath()).build();
-        this.appender = queue.createAppender();
-        this.tailer = queue.createTailer();
+    public ChronicleSink() throws IOException {
+        this("localhost", 1234);
     }
+    public ChronicleSink(final String host, final int port) throws IOException {
+        FileUtil.deleteTmpDirFilesMatching("chronicle-sink");
+        final File basePath = FileUtil.tmpDirFile("chronicle-sink");
 
-    public ExcerptAppender getAppender() {
-        return appender;
-    }
-
-    public ExcerptTailer getTailer() {
-        return tailer;
+        this.queue = ChronicleQueueBuilder
+                .indexed(basePath.getPath())
+                .sink()
+                .reconnectionAttempts(3)
+                .connectAddress(host, port)
+                .build();
     }
 
     public void close() throws IOException {
-        appender = null;
-        tailer = null;
         queue.close();
         queue = null;
     }

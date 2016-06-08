@@ -25,33 +25,30 @@ package org.tools4j.fx.highway.chronicle;
 
 import net.openhft.chronicle.Chronicle;
 import net.openhft.chronicle.ChronicleQueueBuilder;
-import net.openhft.chronicle.ExcerptAppender;
 import net.openhft.chronicle.ExcerptTailer;
-import org.tools4j.fx.highway.util.FileUtil;
+import net.openhft.chronicle.tools.WrappedChronicle;
 
-import java.io.File;
 import java.io.IOException;
 
 /**
  * Created by terz on 31/05/2016.
  */
-public class ChronicleQueue {
+public class ChronicleRemoteTailer {
 
     private Chronicle queue;
-    private ExcerptAppender appender;
     private ExcerptTailer tailer;
 
-    public ChronicleQueue() throws IOException {
-        FileUtil.deleteTmpDirFilesMatching("chronicle-queue");
-        final File basePath = FileUtil.tmpDirFile("chronicle-queue");
-
-        this.queue = ChronicleQueueBuilder.indexed(basePath.getPath()).build();
-        this.appender = queue.createAppender();
-        this.tailer = queue.createTailer();
+    public ChronicleRemoteTailer() throws IOException {
+        this("localhost", 1234);
     }
-
-    public ExcerptAppender getAppender() {
-        return appender;
+    public ChronicleRemoteTailer(final String host, final int port) throws IOException {
+        this.queue = ChronicleQueueBuilder
+                .remoteTailer()
+                .reconnectionAttempts(3)
+                .connectAddress(host, port)
+                .appendRequireAck(false)
+                .build();
+        this.tailer = queue.createTailer().toStart();
     }
 
     public ExcerptTailer getTailer() {
@@ -59,7 +56,6 @@ public class ChronicleQueue {
     }
 
     public void close() throws IOException {
-        appender = null;
         tailer = null;
         queue.close();
         queue = null;

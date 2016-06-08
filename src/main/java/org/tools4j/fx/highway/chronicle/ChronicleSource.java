@@ -26,41 +26,56 @@ package org.tools4j.fx.highway.chronicle;
 import net.openhft.chronicle.Chronicle;
 import net.openhft.chronicle.ChronicleQueueBuilder;
 import net.openhft.chronicle.ExcerptAppender;
-import net.openhft.chronicle.ExcerptTailer;
+import net.openhft.chronicle.tcp.TcpConnectionHandler;
+import net.openhft.chronicle.tcp.TcpConnectionListener;
 import org.tools4j.fx.highway.util.FileUtil;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.channels.ServerSocketChannel;
+import java.nio.channels.SocketChannel;
 
-/**
- * Created by terz on 31/05/2016.
- */
-public class ChronicleQueue {
+public class ChronicleSource {
 
+    private TcpConnectionListener connectionListener = new TcpConnectionHandler() {
+        @Override
+        public void onConnect(SocketChannel channel) {
+            System.out.println("CONNECT: address=" + channel.socket().getLocalSocketAddress() + ", port=" + channel.socket().getLocalPort());
+        }
+
+        @Override
+        public void onListen(ServerSocketChannel channel) {
+            System.out.println("LISTEN, address=" + channel.socket().getLocalSocketAddress() + ", port=" + channel.socket().getLocalPort());
+        }
+    };
     private Chronicle queue;
-    private ExcerptAppender appender;
-    private ExcerptTailer tailer;
 
-    public ChronicleQueue() throws IOException {
-        FileUtil.deleteTmpDirFilesMatching("chronicle-queue");
-        final File basePath = FileUtil.tmpDirFile("chronicle-queue");
+    public ChronicleSource() throws IOException {
+        this("localhost", 1234);
+    }
+    public ChronicleSource(final String host, final int port) throws IOException {
+        FileUtil.deleteTmpDirFilesMatching("chronicle-source");
+        final File basePath = FileUtil.tmpDirFile("chronicle-source");
 
-        this.queue = ChronicleQueueBuilder.indexed(basePath.getPath()).build();
-        this.appender = queue.createAppender();
-        this.tailer = queue.createTailer();
+        this.queue = ChronicleQueueBuilder
+                .indexed(basePath.getPath())
+                .source()
+                .acceptorMaxThreads(3)
+                .bindAddress(host, port)
+                .connectionListener(connectionListener)
+                .build();
+        this.queue.clear();
     }
 
-    public ExcerptAppender getAppender() {
-        return appender;
-    }
-
-    public ExcerptTailer getTailer() {
-        return tailer;
+    public ExcerptAppender createAppender() {
+        try {
+            return queue.createAppender();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public void close() throws IOException {
-        appender = null;
-        tailer = null;
         queue.close();
         queue = null;
     }
