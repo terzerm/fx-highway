@@ -33,6 +33,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.octtech.bw.ByteWatcher;
+import org.tools4j.fx.highway.util.AffinityThread;
 import org.tools4j.fx.highway.util.SerializerHelper;
 import org.tools4j.fx.highway.util.WaitLatch;
 
@@ -50,22 +51,27 @@ public class ChronicleQueueRawDataLatencyTest {
 
     private final long messagesPerSecond;
     private final int numberOfBytes;
+    private final boolean affinity;
 
     private ChronicleQueue chronicleQueue;
     private ByteWatcher byteWatcher;
 
-    @Parameterized.Parameters(name = "{index}: MPS={0}, NBYTES={1}")
+    @Parameterized.Parameters(name = "{index}: MPS={0}, NBYTES={1}, AFFINITY={2}")
     public static Collection testRunParameters() {
         return Arrays.asList(new Object[][] {
-                { 160000, 100 },
-                { 500000, 100 }
+                { 160000, 100, false },
+                { 500000, 100, false },
+                { 160000, 100, true },
+                { 500000, 100, true }
         });
     }
 
     public ChronicleQueueRawDataLatencyTest(final long messagesPerSecond,
-                                            final int numberOfBytes) {
+                                            final int numberOfBytes,
+                                            final boolean affinity) {
         this.messagesPerSecond = messagesPerSecond;
         this.numberOfBytes = numberOfBytes;
+        this.affinity = affinity;
     }
 
     @Before
@@ -119,7 +125,7 @@ public class ChronicleQueueRawDataLatencyTest {
         final AtomicInteger count = new AtomicInteger();
 
         //when
-        final Thread subscriberThread = new Thread(() -> {
+        final Thread subscriberThread = new AffinityThread(affinity, () -> {
             final ExcerptTailer tailer = chronicleQueue.getTailer();
             final AtomicLong t0 = new AtomicLong();
             final AtomicLong t1 = new AtomicLong();
@@ -166,7 +172,7 @@ public class ChronicleQueueRawDataLatencyTest {
         subscriberThread.start();
 
         //publisher
-        final Thread publisherThread = new Thread(() -> {
+        final Thread publisherThread = new AffinityThread(affinity, () -> {
             final ExcerptAppender appender = chronicleQueue.getAppender();
             final long periodNs = 1000000000/messagesPerSecond;
             pubSubReadyLatch.countDown();
@@ -225,7 +231,7 @@ public class ChronicleQueueRawDataLatencyTest {
     }
 
     public static void main(String... args) throws Exception {
-        final ChronicleQueueRawDataLatencyTest chronicleQueueLatencyTest = new ChronicleQueueRawDataLatencyTest(160000, 94);
+        final ChronicleQueueRawDataLatencyTest chronicleQueueLatencyTest = new ChronicleQueueRawDataLatencyTest(160000, 94, false);
         chronicleQueueLatencyTest.setup();
         try {
             chronicleQueueLatencyTest.latencyTest();

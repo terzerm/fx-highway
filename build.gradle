@@ -56,6 +56,7 @@ dependencies {
     testCompile 'junit:junit:4.11'
     testCompile 'org.assertj:assertj-core:3.4.1'
     testCompile 'ByteWatcher:bytewatcher:1.1'
+    testCompile 'org.slf4j:slf4j-simple:1.7.14'
 }
 
 task extractXsd(type: Copy) {
@@ -78,15 +79,6 @@ task sbeTool(type: JavaExec, dependsOn: extractXsd) {
 
 
 processResources.dependsOn extractXsd,sbeTool
-
-test {
-	//supported system properties for test sets:
-	//
-	//-DtestVariant=TINY,SMALL,STANDARD,ALL
-	//-DtestCases=TINY,SMALL,STANDARD,ALL
-	//-DtestScales=TINY,SMALL,STANDARD,ALL
-    systemProperties = System.getProperties()
-}
 
 uploadArchives {
     repositories {
