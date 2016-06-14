@@ -67,7 +67,7 @@ public class ChronicleQueueLatencyTest {
     private ChronicleQueue chronicleQueue;
     private ByteWatcher byteWatcher;
 
-    @Parameterized.Parameters(name = "{index}: CH={0}, MPS={1}, D={2}")
+    @Parameterized.Parameters(name = "{index}: MPS={0}, D={1}")
     public static Collection testRunParameters() {
         return Arrays.asList(new Object[][] {
                 { 160000, 2, MutableMarketDataSnapshot.BUILDER_SUPPLIER_FACTORY },

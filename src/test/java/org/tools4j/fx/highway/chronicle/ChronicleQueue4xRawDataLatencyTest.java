@@ -23,10 +23,18 @@
  */
 package org.tools4j.fx.highway.chronicle;
 
-import net.openhft.chronicle.ExcerptAppender;
-import net.openhft.chronicle.ExcerptTailer;
+import net.openhft.affinity.Affinity;
+import net.openhft.affinity.AffinityLock;
+import net.openhft.chronicle.core.io.IORuntimeException;
+import net.openhft.chronicle.queue.ExcerptAppender;
+import net.openhft.chronicle.queue.ExcerptTailer;
+import net.openhft.chronicle.wire.ReadMarshallable;
+import net.openhft.chronicle.wire.WireIn;
+import net.openhft.chronicle.wire.WireOut;
+import net.openhft.chronicle.wire.WriteMarshallable;
 import org.HdrHistogram.Histogram;
 import org.agrona.concurrent.NanoClock;
+import org.jetbrains.annotations.NotNull;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -46,31 +54,36 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 @RunWith(Parameterized.class)
-public class ChronicleQueueRawDataLatencyTest {
+public class ChronicleQueue4xRawDataLatencyTest {
 
     private final long messagesPerSecond;
     private final int numberOfBytes;
+    private final boolean affinity;
 
-    private ChronicleQueue chronicleQueue;
+    private ChronicleQueue4x chronicleQueue;
     private ByteWatcher byteWatcher;
 
-    @Parameterized.Parameters(name = "{index}: MPS={0}, NBYTES={1}")
+    @Parameterized.Parameters(name = "{index}: MPS={0}, NBYTES={1}, AFFINITY={2}")
     public static Collection testRunParameters() {
         return Arrays.asList(new Object[][] {
-                { 160000, 100 },
-                { 500000, 100 }
+                { 160000, 100, false },
+                { 500000, 100, false },
+                { 160000, 100, true },
+                { 500000, 100, true }
         });
     }
 
-    public ChronicleQueueRawDataLatencyTest(final long messagesPerSecond,
-                                            final int numberOfBytes) {
+    public ChronicleQueue4xRawDataLatencyTest(final long messagesPerSecond,
+                                              final int numberOfBytes,
+                                              final boolean affinity) {
         this.messagesPerSecond = messagesPerSecond;
         this.numberOfBytes = numberOfBytes;
+        this.affinity = affinity;
     }
 
     @Before
     public void setup() throws Exception {
-        chronicleQueue = new ChronicleQueue();
+        chronicleQueue = new ChronicleQueue4x();
 
         final long limit = 0;
         final Map<Thread, AtomicLong> lastSizePerThread = new ConcurrentHashMap<>();
@@ -120,83 +133,106 @@ public class ChronicleQueueRawDataLatencyTest {
 
         //when
         final Thread subscriberThread = new Thread(() -> {
-            final ExcerptTailer tailer = chronicleQueue.getTailer();
-            final AtomicLong t0 = new AtomicLong();
-            final AtomicLong t1 = new AtomicLong();
-            final AtomicLong t2 = new AtomicLong();
-            pubSubReadyLatch.countDown();
-            while (!terminate.get()) {
-                if (tailer.nextIndex()) {
-                    if (count.get() == 0) t0.set(clock.nanoTime());
-                    else if (count.get() == w-1) t1.set(clock.nanoTime());
-                    else if (count.get() == n-1) t2.set(clock.nanoTime());
-                    long sendTime = tailer.readLong();
-                    for (int i = 8; i < numberOfBytes; ) {
-                        if (i + 8 <= numberOfBytes) {
-                            tailer.readLong();
-                            i += 8;
-                        } else {
-                            tailer.readByte();
-                            i++;
+            final AffinityLock lock = affinity ? Affinity.acquireLock() : null;
+            try {
+                final ExcerptTailer tailer = chronicleQueue.getTailer();
+                final AtomicLong t0 = new AtomicLong();
+                final AtomicLong t1 = new AtomicLong();
+                final AtomicLong t2 = new AtomicLong();
+                final ReadMarshallable rm = new ReadMarshallable() {
+                    @Override
+                    public void readMarshallable(@NotNull WireIn wire) throws IORuntimeException {
+                        if (count.get() == 0) t0.set(clock.nanoTime());
+                        else if (count.get() == w - 1) t1.set(clock.nanoTime());
+                        else if (count.get() == n - 1) t2.set(clock.nanoTime());
+                        long sendTime = wire.read().int64();
+                        for (int i = 8; i < numberOfBytes; ) {
+                            if (i + 8 <= numberOfBytes) {
+                                wire.read().int64();
+                                i += 8;
+                            } else {
+                                wire.read().int8();
+                                i++;
+                            }
+                        }
+                        final long time = clock.nanoTime();
+                        final int cnt = count.incrementAndGet();
+                        if (cnt <= n) {
+                            if (time - sendTime > histogramMax) {
+                                //throw new RuntimeException("bad data in message " + cnt + ": time=" + time + ", sendTime=" + sendTime + ", dt=" + (time - sendTime));
+                                histogram.recordValue(histogramMax);
+                            } else {
+                                histogram.recordValue(time - sendTime);
+                            }
+                        }
+                        if (cnt == w) {
+                            histogram.reset();
                         }
                     }
-                    tailer.finish();
-                    final long time = clock.nanoTime();
-                    final int cnt = count.incrementAndGet();
-                    if (cnt <= n) {
-                        if (time - sendTime > histogramMax) {
-                            //throw new RuntimeException("bad data in message " + cnt + ": time=" + time + ", sendTime=" + sendTime + ", dt=" + (time - sendTime));
-                            histogram.recordValue(histogramMax);
-                        } else {
-                            histogram.recordValue(time - sendTime);
+                };
+                pubSubReadyLatch.countDown();
+                while (!terminate.get()) {
+                    if (tailer.readDocument(rm)) {
+                        if (count.get() >= n) {
+                            receivedAllLatch.countDown();
+                            break;
                         }
                     }
-                    if (cnt == w) {
-                        histogram.reset();
-                    }
-                    if (count.get() >= n) {
-                        receivedAllLatch.countDown();
-                        break;
-                    }
+                    ;
+                }
+                System.out.println((t2.get() - t0.get()) / 1000.0 + " us total receiving time (" + (t2.get() - t1.get()) / (1000f * c) + " us/message, " + c / ((t2.get() - t1.get()) / 1000000000f) + " messages/second)");
+            } finally {
+                if (lock != null) {
+                    lock.release();
                 }
             }
-            System.out.println((t2.get() - t0.get())/1000.0 + " us total receiving time (" + (t2.get() - t1.get())/(1000f*c) + " us/message, " + c/((t2.get()-t1.get())/1000000000f) + " messages/second)");
         });
         subscriberThread.setName("subscriber-thread");
         subscriberThread.start();
 
         //publisher
         final Thread publisherThread = new Thread(() -> {
-            final ExcerptAppender appender = chronicleQueue.getAppender();
-            final long periodNs = 1000000000/messagesPerSecond;
-            pubSubReadyLatch.countDown();
-            pubSubReadyLatch.awaitThrowOnTimeout(5, TimeUnit.SECONDS);
-            long cntAdmin = 0;
-            long cntBackp = 0;
-            long cnt = 0;
-            final long t0 = clock.nanoTime();
-            while (cnt < n && !terminate.get()) {
-                long tCur = clock.nanoTime();
-                while (tCur - t0 < cnt * periodNs) {
-                    tCur = clock.nanoTime();
-                }
-                final long time = clock.nanoTime();
-                appender.startExcerpt(numberOfBytes);
-                appender.writeLong(time);
-                for (int i = 8; i < numberOfBytes; ) {
-                    if (i + 8 <= numberOfBytes) {
-                        appender.writeLong(time + i);
-                        i += 8;
-                    } else {
-                        appender.writeByte((byte)(time + i));
-                        i++;
+            final AffinityLock lock = affinity ? AffinityLock.acquireLock() : null;
+            try {
+                final ExcerptAppender appender = chronicleQueue.getAppender();
+                final long periodNs = 1000000000/messagesPerSecond;
+                pubSubReadyLatch.countDown();
+                pubSubReadyLatch.awaitThrowOnTimeout(5, TimeUnit.SECONDS);
+                long cntAdmin = 0;
+                long cntBackp = 0;
+                long cnt = 0;
+                final WriteMarshallable wm = new WriteMarshallable() {
+                    @Override
+                    public void writeMarshallable(@NotNull WireOut wire) {
+                        final long time = clock.nanoTime();
+                        wire.write().int64(time);
+                        for (int i = 8; i < numberOfBytes; ) {
+                            if (i + 8 <= numberOfBytes) {
+                                wire.write().int64(time + i);
+                                i += 8;
+                            } else {
+                                wire.write().int8((byte)(time + i));
+                                i++;
+                            }
+                        }
                     }
+                };
+                final long t0 = clock.nanoTime();
+                while (cnt < n && !terminate.get()) {
+                    long tCur = clock.nanoTime();
+                    while (tCur - t0 < cnt * periodNs) {
+                        tCur = clock.nanoTime();
+                    }
+                    appender.writeDocument(wm);
+                    cnt++;
                 }
-                appender.finish();
-                cnt++;
+                final long t1 = clock.nanoTime();
+                System.out.println((t1 - t0) / 1000.0 + " us total publishing time (backp=" + cntBackp + ", admin=" + cntAdmin + ", cnt=" + cnt + ")");
+            } finally {
+                if (lock != null) {
+                    lock.release();
+                }
             }
-            final long t1 = clock.nanoTime();
-            System.out.println((t1 - t0) / 1000.0 + " us total publishing time (backp=" + cntBackp + ", admin=" + cntAdmin + ", cnt=" + cnt + ")");
         });
         publisherThread.setName("publisher-thread");
         publisherThread.start();;
@@ -225,7 +261,7 @@ public class ChronicleQueueRawDataLatencyTest {
     }
 
     public static void main(String... args) throws Exception {
-        final ChronicleQueueRawDataLatencyTest chronicleQueueLatencyTest = new ChronicleQueueRawDataLatencyTest(160000, 94);
+        final ChronicleQueue4xRawDataLatencyTest chronicleQueueLatencyTest = new ChronicleQueue4xRawDataLatencyTest(160000, 94, false);
         chronicleQueueLatencyTest.setup();
         try {
             chronicleQueueLatencyTest.latencyTest();

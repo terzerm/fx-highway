@@ -50,7 +50,7 @@ dependencies {
     compile 'com.google.guava:guava:19.0'
     compile 'uk.co.real-logic:sbe-all:1.4.0-RC4'
     compile 'io.aeron:aeron-all:0.9.7'
-//    compile 'net.openhft:chronicle-queue:4.4.2'
+    compile 'net.openhft:chronicle-queue:4.4.2'
     compile 'net.openhft:chronicle:3.6.2'
     compile 'org.hdrhistogram:HdrHistogram:2.1.9'
     testCompile 'junit:junit:4.11'
