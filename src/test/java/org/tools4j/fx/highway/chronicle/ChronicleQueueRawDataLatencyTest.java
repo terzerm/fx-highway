@@ -34,12 +34,12 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.octtech.bw.ByteWatcher;
 import org.tools4j.fx.highway.util.SerializerHelper;
+import org.tools4j.fx.highway.util.WaitLatch;
 
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -114,7 +114,8 @@ public class ChronicleQueueRawDataLatencyTest {
         final AtomicBoolean terminate = new AtomicBoolean(false);
         final NanoClock clock = SerializerHelper.NANO_CLOCK;
         final Histogram histogram = new Histogram(1, histogramMax, 3);
-        final CountDownLatch subscriberLatch = new CountDownLatch(1);
+        final WaitLatch pubSubReadyLatch = new WaitLatch(2);
+        final WaitLatch receivedAllLatch = new WaitLatch(1);
         final AtomicInteger count = new AtomicInteger();
 
         //when
@@ -123,6 +124,7 @@ public class ChronicleQueueRawDataLatencyTest {
             final AtomicLong t0 = new AtomicLong();
             final AtomicLong t1 = new AtomicLong();
             final AtomicLong t2 = new AtomicLong();
+            pubSubReadyLatch.countDown();
             while (!terminate.get()) {
                 if (tailer.nextIndex()) {
                     if (count.get() == 0) t0.set(clock.nanoTime());
@@ -153,7 +155,7 @@ public class ChronicleQueueRawDataLatencyTest {
                         histogram.reset();
                     }
                     if (count.get() >= n) {
-                        subscriberLatch.countDown();
+                        receivedAllLatch.countDown();
                         break;
                     }
                 }
@@ -167,6 +169,8 @@ public class ChronicleQueueRawDataLatencyTest {
         final Thread publisherThread = new Thread(() -> {
             final ExcerptAppender appender = chronicleQueue.getAppender();
             final long periodNs = 1000000000/messagesPerSecond;
+            pubSubReadyLatch.countDown();
+            pubSubReadyLatch.awaitThrowOnTimeout(5, TimeUnit.SECONDS);
             long cntAdmin = 0;
             long cntBackp = 0;
             long cnt = 0;
@@ -198,7 +202,7 @@ public class ChronicleQueueRawDataLatencyTest {
         publisherThread.start();;
 
         //then
-        if (!subscriberLatch.await(maxTimeToRunSeconds, TimeUnit.SECONDS)) {
+        if (!receivedAllLatch.await(maxTimeToRunSeconds, TimeUnit.SECONDS)) {
             terminate.set(true);
             System.err.println("timeout after receiving " + count + " messages.");
             throw new RuntimeException("simulation timed out");

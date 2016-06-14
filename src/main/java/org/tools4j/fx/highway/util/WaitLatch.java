@@ -21,43 +21,38 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package org.tools4j.fx.highway.chronicle;
+package org.tools4j.fx.highway.util;
 
-import net.openhft.chronicle.Chronicle;
-import net.openhft.chronicle.ChronicleQueueBuilder;
-import net.openhft.chronicle.ExcerptTailer;
-import net.openhft.chronicle.tools.WrappedChronicle;
-
-import java.io.IOException;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 /**
- * Created by terz on 31/05/2016.
+ * Like a latch but doesn't throw checked exceptions.
  */
-public class ChronicleRemoteTailer {
+public class WaitLatch {
 
-    private Chronicle queue;
-    private ExcerptTailer tailer;
+    private final CountDownLatch latch;
 
-    public ChronicleRemoteTailer() throws IOException {
-        this("localhost", 1234);
-    }
-    public ChronicleRemoteTailer(final String host, final int port) throws IOException {
-        this.queue = ChronicleQueueBuilder
-                .remoteTailer()
-                .reconnectionAttempts(3)
-                .connectAddress(host, port)
-                .appendRequireAck(true)
-                .build();
-        this.tailer = queue.createTailer().toStart();
+    public WaitLatch(final int count) {
+        latch = new CountDownLatch(count);
     }
 
-    public ExcerptTailer getTailer() {
-        return tailer;
+    public void countDown() {
+        latch.countDown();
     }
 
-    public void close() throws IOException {
-        tailer = null;
-        queue.close();
-        queue = null;
+    public boolean await(final long timeout, final TimeUnit unit) {
+        try {
+            return latch.await(timeout, unit);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException(e);
+        }
+    }
+
+    public void awaitThrowOnTimeout(final long timeout, final TimeUnit unit) {
+        if (!await(timeout, unit)) {
+            throw new RuntimeException("timeout after " + timeout + " " + unit);
+        }
     }
 }

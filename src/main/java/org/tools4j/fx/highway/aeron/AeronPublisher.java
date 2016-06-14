@@ -101,7 +101,7 @@ public class AeronPublisher extends AbstractAeronProcess {
         return args;
     }
 
-    public static void main(final String... args) {
+    public static void main(final String... args) throws Exception {
         final String aeronDirectoryName = args[0];
         final String channel = args[1];
         final int streamId = Integer.parseInt(args[2]);
@@ -130,11 +130,12 @@ public class AeronPublisher extends AbstractAeronProcess {
         }
     }
 
-    private static void run(final Publication publication, final long messageCount, final long messagesPerSecond, final int marketDataDepth) {
+    private static void run(final Publication publication, final long messageCount, final long messagesPerSecond, final int marketDataDepth) throws InterruptedException {
         final NanoClock clock = new SystemNanoClock();
         final MutableMarketDataSnapshot snapshot = new MutableMarketDataSnapshot();
         final UnsafeBuffer unsafeBuffer = new UnsafeBuffer(ByteBuffer.allocateDirect(4096));
         final long periodNs = 1000000000/messagesPerSecond;
+        Thread.sleep(2000);//make sure the subscriber is ready
         long cntAdmin = 0;
         long cntBackp = 0;
         long cnt = 0;

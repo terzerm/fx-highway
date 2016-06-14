@@ -39,6 +39,7 @@ import org.tools4j.fx.highway.message.MarketDataSnapshotBuilder;
 import org.tools4j.fx.highway.message.MutableMarketDataSnapshot;
 import org.tools4j.fx.highway.message.SupplierFactory;
 import org.tools4j.fx.highway.util.SerializerHelper;
+import org.tools4j.fx.highway.util.WaitLatch;
 
 import java.nio.ByteBuffer;
 import java.util.Arrays;
@@ -137,7 +138,8 @@ public class AeronEmbeddedLatencyTest {
         final AtomicBoolean terminate = new AtomicBoolean(false);
         final NanoClock clock = SerializerHelper.NANO_CLOCK;
         final Histogram histogram = new Histogram(1, 1000000000, 3);
-        final CountDownLatch subscriberLatch = new CountDownLatch(1);
+        final WaitLatch pubSubReadyLatch = new WaitLatch(2);
+        final WaitLatch receivedAllLatch = new WaitLatch(1);
         final AtomicInteger count = new AtomicInteger();
 
         //when
@@ -162,10 +164,11 @@ public class AeronEmbeddedLatencyTest {
                     histogram.reset();
                 }
             };
+            pubSubReadyLatch.countDown();
             while (!terminate.get()) {
                 embeddedAeron.getSubscription().poll(fh, 256);
                 if (count.get() >= n) {
-                    subscriberLatch.countDown();
+                    receivedAllLatch.countDown();
                     break;
                 }
             }
@@ -178,6 +181,8 @@ public class AeronEmbeddedLatencyTest {
             final Supplier<MarketDataSnapshotBuilder> builderSupplier = builderSupplierFactory.create();
             final UnsafeBuffer unsafeBuffer = new UnsafeBuffer(ByteBuffer.allocateDirect(4096));
             final long periodNs = 1000000000/messagesPerSecond;
+            pubSubReadyLatch.countDown();
+            pubSubReadyLatch.awaitThrowOnTimeout(5, TimeUnit.SECONDS);
             long cntAdmin = 0;
             long cntBackp = 0;
             long cnt = 0;
@@ -212,7 +217,7 @@ public class AeronEmbeddedLatencyTest {
         publisherThread.start();;
 
         //then
-        if (!subscriberLatch.await(maxTimeToRunSeconds, TimeUnit.SECONDS)) {
+        if (!receivedAllLatch.await(maxTimeToRunSeconds, TimeUnit.SECONDS)) {
             terminate.set(true);
             System.err.println("timeout after receiving " + count + " messages.");
             throw new RuntimeException("simulation timed out");
