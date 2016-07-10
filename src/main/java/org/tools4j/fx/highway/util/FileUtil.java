@@ -29,9 +29,14 @@ import java.io.IOException;
 public class FileUtil {
 
     public static final File IO_TMPDIR = new File(System.getProperty("java.io.tmpdir"));
+    public static final File SHARED_MEM_DIR = new File("/dev/shm");
 
     public static File tmpDirFile(final String name) {
         return new File(IO_TMPDIR, name);
+    }
+
+    public static File sharedMemDir(final String name) {
+        return SHARED_MEM_DIR.isDirectory() ? new File(SHARED_MEM_DIR, name) : tmpDirFile(name);
     }
 
     public static void deleteTmpDirFilesMatching(final String namePrefix) throws IOException {
