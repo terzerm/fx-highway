@@ -32,6 +32,7 @@ import org.agrona.concurrent.SystemNanoClock;
 import org.agrona.concurrent.UnsafeBuffer;
 import org.tools4j.fx.highway.message.MarketDataSnapshot;
 import org.tools4j.fx.highway.message.MutableMarketDataSnapshot;
+import org.tools4j.fx.highway.util.HistogramPrinter;
 import org.tools4j.fx.highway.util.SerializerHelper;
 
 import java.util.ArrayList;
@@ -150,21 +151,7 @@ public class AeronSubscriber extends AbstractAeronProcess {
         final long c = count.get();
         System.out.println((t2.get() - t0.get())/1000.0 + " us total receiving time (" + (t2.get() - t0.get())/(1000f*c) + " us/message, " + c/((t2.get()-t0.get())/1000000000f) + " messages/second)");
         System.out.println();
-
-        printStats(histogram);
-    }
-
-    private static void printStats(final Histogram histogram) {
-        System.out.println("Percentiles (micros)");
-        System.out.println("\t90%    : " + histogram.getValueAtPercentile(90)/1000f);
-        System.out.println("\t99%    : " + histogram.getValueAtPercentile(99)/1000f);
-        System.out.println("\t99.9%  : " + histogram.getValueAtPercentile(99.9)/1000f);
-        System.out.println("\t99.99% : " + histogram.getValueAtPercentile(99.99)/1000f);
-        System.out.println("\t99.999%: " + histogram.getValueAtPercentile(99.999)/1000f);
-        System.out.println("\tmax    : " + histogram.getMaxValue()/1000f);
-        System.out.println();
-        System.out.println("Histogram (micros):");
-        histogram.outputPercentileDistribution(System.out, 1000.0);
+        HistogramPrinter.printHistogram(histogram);
     }
 
 }

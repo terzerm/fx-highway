@@ -40,14 +40,10 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.octtech.bw.ByteWatcher;
-import org.tools4j.fx.highway.util.AffinityThread;
-import org.tools4j.fx.highway.util.SerializerHelper;
-import org.tools4j.fx.highway.util.WaitLatch;
+import org.tools4j.fx.highway.util.*;
 
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -85,17 +81,7 @@ public class ChronicleQueue4xRawDataLatencyTest {
     @Before
     public void setup() throws Exception {
         chronicleQueue = new ChronicleQueue4x();
-
-        final long limit = 0;
-        final Map<Thread, AtomicLong> lastSizePerThread = new ConcurrentHashMap<>();
-        byteWatcher = new ByteWatcher();
-        byteWatcher.onByteWatch((t, size) -> {
-            final AtomicLong last = lastSizePerThread.computeIfAbsent(t, k -> new AtomicLong());
-            if (last.getAndSet(size) < size) {
-                System.out.printf("%s exceeded limit: %d using: %d%n",
-                        t.getName(), limit, size);
-            }
-        } , limit);
+        byteWatcher = ByteWatcherPrinter.watch();
     }
 
     @After
@@ -236,16 +222,7 @@ public class ChronicleQueue4xRawDataLatencyTest {
         publisherThread.join(2000);
 
         System.out.println();
-        System.out.println("Percentiles (micros)");
-        System.out.println("\t90%    : " + histogram.getValueAtPercentile(90)/1000f);
-        System.out.println("\t99%    : " + histogram.getValueAtPercentile(99)/1000f);
-        System.out.println("\t99.9%  : " + histogram.getValueAtPercentile(99.9)/1000f);
-        System.out.println("\t99.99% : " + histogram.getValueAtPercentile(99.99)/1000f);
-        System.out.println("\t99.999%: " + histogram.getValueAtPercentile(99.999)/1000f);
-        System.out.println("\tmax    : " + histogram.getMaxValue()/1000f);
-        System.out.println();
-        System.out.println("Histogram (micros):");
-        histogram.outputPercentileDistribution(System.out, 1000.0);
+        HistogramPrinter.printHistogram(histogram);
     }
 
     public static void main(String... args) throws Exception {

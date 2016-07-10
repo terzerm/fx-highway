@@ -38,16 +38,15 @@ import org.tools4j.fx.highway.message.MarketDataSnapshot;
 import org.tools4j.fx.highway.message.MarketDataSnapshotBuilder;
 import org.tools4j.fx.highway.message.MutableMarketDataSnapshot;
 import org.tools4j.fx.highway.message.SupplierFactory;
+import org.tools4j.fx.highway.util.ByteWatcherPrinter;
+import org.tools4j.fx.highway.util.HistogramPrinter;
 import org.tools4j.fx.highway.util.SerializerHelper;
 import org.tools4j.fx.highway.util.WaitLatch;
 
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -91,17 +90,7 @@ public class AeronEmbeddedLatencyTest {
     public void setup() {
         embeddedAeron = new EmbeddedAeron(channel, 10);
         embeddedAeron.awaitConnection(5, TimeUnit.SECONDS);
-
-        final long limit = 0;
-        final Map<Thread, AtomicLong> lastSizePerThread = new ConcurrentHashMap<>();
-        byteWatcher = new ByteWatcher();
-        byteWatcher.onByteWatch((t, size) -> {
-            final AtomicLong last = lastSizePerThread.computeIfAbsent(t, k -> new AtomicLong());
-            if (last.getAndSet(size) < size) {
-                System.out.printf("%s exceeded limit: %d using: %d%n",
-                        t.getName(), limit, size);
-            }
-        } , limit);
+        byteWatcher = ByteWatcherPrinter.watch();
     }
 
     @After
@@ -227,16 +216,7 @@ public class AeronEmbeddedLatencyTest {
         publisherThread.join(2000);
 
         System.out.println();
-        System.out.println("Percentiles (micros)");
-        System.out.println("\t90%    : " + histogram.getValueAtPercentile(90)/1000f);
-        System.out.println("\t99%    : " + histogram.getValueAtPercentile(99)/1000f);
-        System.out.println("\t99.9%  : " + histogram.getValueAtPercentile(99.9)/1000f);
-        System.out.println("\t99.99% : " + histogram.getValueAtPercentile(99.99)/1000f);
-        System.out.println("\t99.999%: " + histogram.getValueAtPercentile(99.999)/1000f);
-        System.out.println("\tmax    : " + histogram.getMaxValue()/1000f);
-        System.out.println();
-        System.out.println("Histogram (micros):");
-        histogram.outputPercentileDistribution(System.out, 1000.0);
+        HistogramPrinter.printHistogram(histogram);
     }
 
     public static void main(String... args) throws Exception {

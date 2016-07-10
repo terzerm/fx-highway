@@ -33,18 +33,13 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.octtech.bw.ByteWatcher;
-import org.tools4j.fx.highway.util.AffinityThread;
-import org.tools4j.fx.highway.util.FileUtil;
-import org.tools4j.fx.highway.util.SerializerHelper;
-import org.tools4j.fx.highway.util.WaitLatch;
+import org.tools4j.fx.highway.util.*;
 
 import java.io.File;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -64,7 +59,7 @@ public class MappedBusRawDataLatencyTest {
     private MappedBusFile mappedBusFile;
     private ByteWatcher byteWatcher;
 
-    @Parameterized.Parameters(name = "{index}: FILE={0}, MPS={1}, NBYTES={2}")
+    @Parameterized.Parameters(name = "{index}: MPS={1}, NBYTES={2}, FILE={0}")
     public static Collection testRunParameters() {
         return Arrays.asList(new Object[][] {
                 {FileUtil.tmpDirFile("fxhighway-mappedbus"), 160000, 100},
@@ -85,17 +80,7 @@ public class MappedBusRawDataLatencyTest {
     @Before
     public void setup() throws Exception {
         mappedBusFile = new MappedBusFile(file.getAbsolutePath(), N * (7L + numberOfBytes), numberOfBytes);
-
-        final long limit = 0;
-        final Map<Thread, AtomicLong> lastSizePerThread = new ConcurrentHashMap<>();
-        byteWatcher = new ByteWatcher();
-        byteWatcher.onByteWatch((t, size) -> {
-            final AtomicLong last = lastSizePerThread.computeIfAbsent(t, k -> new AtomicLong());
-            if (last.getAndSet(size) < size) {
-                System.out.printf("%s exceeded limit: %d using: %d%N",
-                        t.getName(), limit, size);
-            }
-        } , limit);
+        byteWatcher = ByteWatcherPrinter.watch();
     }
 
     @After
@@ -116,6 +101,7 @@ public class MappedBusRawDataLatencyTest {
         final long histogramMax = TimeUnit.SECONDS.toNanos(1);
         final long maxTimeToRunSeconds = 30;
 
+        System.out.println("Config:");
         System.out.println("\twarmup + count      : " + W + " + " + C + " = " + N);
         System.out.println("\tmessagesPerSecond   : " + messagesPerSecond);
         System.out.println("\tmessageSize         : " + numberOfBytes + " bytes");
@@ -224,16 +210,7 @@ public class MappedBusRawDataLatencyTest {
         publisherThread.join(2000);
 
         System.out.println();
-        System.out.println("Percentiles (micros)");
-        System.out.println("\t90%    : " + histogram.getValueAtPercentile(90)/1000f);
-        System.out.println("\t99%    : " + histogram.getValueAtPercentile(99)/1000f);
-        System.out.println("\t99.9%  : " + histogram.getValueAtPercentile(99.9)/1000f);
-        System.out.println("\t99.99% : " + histogram.getValueAtPercentile(99.99)/1000f);
-        System.out.println("\t99.999%: " + histogram.getValueAtPercentile(99.999)/1000f);
-        System.out.println("\tmax    : " + histogram.getMaxValue()/1000f);
-        System.out.println();
-        System.out.println("Histogram (micros):");
-        histogram.outputPercentileDistribution(System.out, 1000.0);
+        HistogramPrinter.printHistogram(histogram);
     }
 
     public static void main(String... args) throws Exception {
