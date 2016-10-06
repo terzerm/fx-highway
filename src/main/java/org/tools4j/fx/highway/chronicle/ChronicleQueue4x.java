@@ -23,9 +23,9 @@
  */
 package org.tools4j.fx.highway.chronicle;
 
-import net.openhft.chronicle.queue.ChronicleQueueBuilder;
 import net.openhft.chronicle.queue.ExcerptAppender;
 import net.openhft.chronicle.queue.ExcerptTailer;
+import net.openhft.chronicle.queue.impl.single.SingleChronicleQueueBuilder;
 import net.openhft.chronicle.wire.WireType;
 import org.tools4j.fx.highway.util.FileUtil;
 
@@ -42,12 +42,17 @@ public class ChronicleQueue4x {
         FileUtil.deleteTmpDirFilesMatching("chronicle-queue4x");
         final File basePath = FileUtil.tmpDirFile("chronicle-queue4x");
 
-        this.queue = ChronicleQueueBuilder
-                .single(basePath.getPath())
+        this.queue = SingleChronicleQueueBuilder
+                .binary(basePath.getPath())
                 .wireType(WireType.FIELDLESS_BINARY)
                 .blockSize(128 << 20)
                 .build();
-        this.appender = queue.createAppender();
+//        this.queue = ChronicleQueueBuilder
+//                .single(basePath.getPath())
+//                .wireType(WireType.FIELDLESS_BINARY)
+//                .blockSize(128 << 20)
+//                .build();
+        this.appender = queue.acquireAppender();
         this.tailer = queue.createTailer();
     }
 
