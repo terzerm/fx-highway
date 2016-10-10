@@ -25,11 +25,13 @@ package org.tools4j.fx.highway.direct;
 
 import sun.misc.Unsafe;
 
+import java.io.Closeable;
 import java.lang.reflect.Field;
 
 /**
  * Appends messages to a {@link Pile}.
  */
-public interface Appender {
+public interface Appender extends Closeable {
     MessageWriter appendMessage();
+    void close();
 }

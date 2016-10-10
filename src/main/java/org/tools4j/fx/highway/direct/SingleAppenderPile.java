@@ -38,24 +38,25 @@ public class SingleAppenderPile implements Pile {
 
     private final MappedFile file;
     private final AtomicBoolean appenderCreated = new AtomicBoolean(false);
+    private final AtomicBoolean closed = new AtomicBoolean(false);
 
     public SingleAppenderPile(final MappedFile file) {
         this.file = Objects.requireNonNull(file);
     }
 
-    public static final Pile create(final String fileName) throws IOException {
-        return create(fileName, DEFAULT_REGION_SIZE);
+    public static final Pile createOrReplace(final String fileName) throws IOException {
+        return createOrReplace(fileName, DEFAULT_REGION_SIZE);
     }
 
-    public static final Pile create(final String fileName, final long regionSize) throws IOException {
+    public static final Pile createOrReplace(final String fileName, final long regionSize) throws IOException {
         return open(new MappedFile(fileName, MappedFile.Mode.READ_WRITE_CLEAR, regionSize));
     }
 
-    public static final Pile openForAppending(final String fileName) throws IOException {
-        return openForAppending(fileName, DEFAULT_REGION_SIZE);
+    public static final Pile createOrAppend(final String fileName) throws IOException {
+        return createOrAppend(fileName, DEFAULT_REGION_SIZE);
     }
 
-    public static final Pile openForAppending(final String fileName, final long regionSize) throws IOException {
+    public static final Pile createOrAppend(final String fileName, final long regionSize) throws IOException {
         return open(new MappedFile(fileName, MappedFile.Mode.READ_WRITE, regionSize));
     }
 
@@ -85,6 +86,13 @@ public class SingleAppenderPile implements Pile {
     @Override
     public Sequencer sequencer() {
         return new SequencerImpl();
+    }
+
+    @Override
+    public void close() {
+        if (closed.compareAndSet(false, true)) {
+            file.close();
+        }
     }
 
     private final class SequencerImpl implements Sequencer {
@@ -118,6 +126,11 @@ public class SingleAppenderPile implements Pile {
             return messageLen;
         }
 
+        @Override
+        public void close() {
+            messageReader.close();
+        }
+
         private final class MessageReaderImpl extends AbstractUnsafeMessageReader {
 
             private MappedRegion region = file.reserveRegion(0);
@@ -125,7 +138,20 @@ public class SingleAppenderPile implements Pile {
             private long positionEnd = -1;
 
             private long readNextMessageLength() {
-                return UNSAFE.getLongVolatile(null, offset);
+                return UNSAFE.getLongVolatile(null, region.getAddress(offset));
+            }
+
+            private void ensureNotClosed() {
+                if (region == null) {
+                    throw new RuntimeException("Sequencer is closed");
+                }
+            }
+
+            public void close() {
+                if (region != null) {
+                    file.releaseRegion(region);
+                    region = null;
+                }
             }
 
             private MessageReader readNextMessage(final long messageLen) {
@@ -139,6 +165,7 @@ public class SingleAppenderPile implements Pile {
 
             @Override
             public Sequencer finishReadMessage() {
+                ensureNotClosed();
                 while (positionEnd < region.getPosition() + region.getSize()) {
                     file.releaseRegion(region);
                     region = file.reserveRegion(region.getIndex() + 1);
@@ -149,6 +176,7 @@ public class SingleAppenderPile implements Pile {
 
             @Override
             protected long getAndIncrementAddress(final int add) {
+                ensureNotClosed();
                 if (positionEnd < 0) {
                     throw new IllegalStateException("No current message");
                 }
@@ -179,7 +207,7 @@ public class SingleAppenderPile implements Pile {
             MappedRegion region = file.reserveRegion(0);
             long offset = 0;
             long messageLen;
-            while ((messageLen = UNSAFE.getLongVolatile(null, offset)) >= 0) {
+            while ((messageLen = UNSAFE.getLongVolatile(null, region.getAddress(offset))) >= 0) {
                 offset += 8 + messageLen;
                 while (offset > region.getSize()) {
                     file.releaseRegion(region);
@@ -187,12 +215,17 @@ public class SingleAppenderPile implements Pile {
                     region = file.reserveRegion(region.getIndex() + 1);
                 }
             }
-            this.messageWriter = new MessageWriterImpl(region, offset);
+            this.messageWriter = new MessageWriterImpl(region, offset + 8);
         }
 
         @Override
         public MessageWriter appendMessage() {
             return messageWriter.startAppendMessage();
+        }
+
+        @Override
+        public void close() {
+            messageWriter.close();
         }
 
         private final class MessageWriterImpl extends AbstractUnsafeMessageWriter {
@@ -208,18 +241,35 @@ public class SingleAppenderPile implements Pile {
                 this.offset = offset;
             }
 
+            private void ensureNotClosed() {
+                if (region == null) {
+                    throw new RuntimeException("Appender is closed");
+                }
+            }
+
+            public void close() {
+                if (region != null) {
+                    if (startRegion != null) {
+                        finishAppendMessage();
+                    }
+                    file.releaseRegion(region);
+                    region = null;
+                }
+            }
+
             private MessageWriter startAppendMessage() {
+                ensureNotClosed();
                 if (startRegion != null) {
                     throw new IllegalStateException("Current message is not finished, must be finished before appending next");
                 }
                 startRegion = region;
-                startOffset = offset;
-                getAndIncrementAddress(8);//skip length field of new message
+                startOffset = offset - 8;
                 return this;
             }
 
             @Override
             protected long getAndIncrementAddress(final int add) {
+                ensureNotClosed();
                 if (startRegion == null) {
                     throw new IllegalStateException("Message already finished");
                 }
@@ -242,6 +292,7 @@ public class SingleAppenderPile implements Pile {
 
             @Override
             public Appender finishAppendMessage() {
+                ensureNotClosed();
                 if (startRegion == null) {
                     throw new IllegalStateException("No message to finish");
                 }

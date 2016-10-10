@@ -23,6 +23,7 @@
  */
 package org.tools4j.fx.highway.direct;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.util.Objects;
@@ -31,9 +32,7 @@ import java.util.concurrent.atomic.AtomicReferenceArray;
 /**
  * Created by terz on 9/10/2016.
  */
-public class MappedFile {
-
-    public static final long DEFAULT_REGION_SIZE = 4L<<20;//4MB
+public class MappedFile implements Closeable {
 
     //must be power of 2!
     public static final long REGION_SIZE_MULTIPLE = 8;
@@ -60,10 +59,6 @@ public class MappedFile {
 
     private volatile AtomicReferenceArray<MappedRegion> mappedRegions = new AtomicReferenceArray<MappedRegion>(2);
 
-    public MappedFile(final String fileName, final Mode mode) throws IOException {
-        this(fileName, mode, DEFAULT_REGION_SIZE);
-    }
-
     public MappedFile(final String fileName, final Mode mode, final long regionSize) throws IOException {
         this(new RandomAccessFile(fileName, mode.getRandomAccessMode()), mode, regionSize);
     }
@@ -89,6 +84,7 @@ public class MappedFile {
     }
 
     public long getFileLength() {
+        ensureNotClosed();
         try {
             return file.length();
         } catch (final IOException e) {
@@ -97,6 +93,7 @@ public class MappedFile {
     }
 
     public void setFileLength(final long length) {
+        ensureNotClosed();
         try {
             file.setLength(length);
         } catch (final IOException e) {
@@ -110,6 +107,7 @@ public class MappedFile {
     }
 
     public void releaseRegion(final MappedRegion mappedRegion) {
+        ensureNotClosed();
         if (0 == mappedRegion.decAndGetRefCount()) {
             final long index = mappedRegion.getPosition() / regionSize;
             if (index < mappedRegions.length()) {
@@ -123,10 +121,10 @@ public class MappedFile {
     }
 
     public MappedRegion reserveRegion(final int index) {
+        ensureNotClosed();
         ensureSufficientMappedRegionsCapacity(index);
         //ASSERT: index < mappedRegions.length
-        final int ix = (int)index;
-        final MappedRegion mr = mappedRegions.get(ix);
+        final MappedRegion mr = mappedRegions.get(index);
         if (mr == null || mr.isClosed() || mr.incAndGetRefCount() == 0) {
             final long position = index * regionSize;
             final long fileLen = getFileLength();
@@ -134,8 +132,8 @@ public class MappedFile {
             if (newFileLen > fileLen) {
                 setFileLength(newFileLen);
             }
-            MappedRegion newRegion = new MappedRegion(file.getChannel(), index, position, regionSize, Math.min(fileLen - position, regionSize));
-            if (mappedRegions.compareAndSet(ix, mr, newRegion)) {
+            final MappedRegion newRegion = new MappedRegion(file.getChannel(), index, position, regionSize, Math.min(fileLen - position, regionSize));
+            if (mappedRegions.compareAndSet(index, mr, newRegion)) {
                 return newRegion;
             }
             //region has been created by someone else
@@ -146,28 +144,74 @@ public class MappedFile {
         return mr;
     }
 
-    private void ensureSufficientMappedRegionsCapacity(final long index) {
+
+
+    private void ensureSufficientMappedRegionsCapacity(final int index) {
         if (index < mappedRegions.length()) {
             return;
         }
-        if (index > Integer.MAX_VALUE) {
+        if (index < 0 || index > Integer.MAX_VALUE - 1) {
             throw new IllegalArgumentException("index out of bounds: " + index);
         }
         synchronized (this) {
             final AtomicReferenceArray<MappedRegion> oldArr = mappedRegions;
             final int oldLen = mappedRegions.length();
             if (index < oldLen) {
-                final int newLen = Math.max((int) index, oldLen * 2);//overflow would be corrected by max
-                final AtomicReferenceArray<MappedRegion> newArr = new AtomicReferenceArray<>(newLen);
-                for (int i = 0; i < oldLen; i++) {
-                    final MappedRegion mr = oldArr.get(i);
-                    if (mr != null && !mr.isClosed()) {
-                        newArr.set(i, mr);
-                    }
-                }
-                mappedRegions = newArr;
+                return;
             }
+            final int newLen = Math.max(index + 1, oldLen * 2);//overflow would be corrected by max
+            final AtomicReferenceArray<MappedRegion> newArr = new AtomicReferenceArray<>(newLen);
+            for (int i = 0; i < oldLen; i++) {
+                final MappedRegion mr = oldArr.get(i);
+                if (mr != null && !mr.isClosed()) {
+                    newArr.set(i, mr);
+                }
+            }
+            mappedRegions = newArr;
         }
     }
+
+    private void ensureNotClosed() {
+        if (isClosed()) {
+            throw new IllegalStateException("Mapped file is closed");
+        }
+    }
+
+    public boolean isClosed() {
+        return mappedRegions == null;
+    }
+
+    public void close() {
+        if (mappedRegions == null) {
+            return;
+        }
+        try {
+            final AtomicReferenceArray<MappedRegion> arr;
+            synchronized (this) {
+                arr = mappedRegions;
+                mappedRegions = null;
+            }
+            if (arr == null) {
+                return;
+            }
+            final int len = arr.length();
+            for (int i = 0; i < len; i++) {
+                final MappedRegion mr = arr.get(i);
+                if (mr != null) {
+                    if (!mr.isClosed()) {
+                        throw new IllegalStateException("Not all mapped regions are closed, close appender and all sequencers first");
+                    }
+                    if (!arr.compareAndSet(i, mr, null)) {
+                        throw new IllegalStateException("Appender or sequencers seem still active, close appender and all sequencers first");
+                    }
+                }
+            }
+            file.getChannel().close();
+            file.close();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
 
 }

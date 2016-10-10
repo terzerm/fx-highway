@@ -23,11 +23,14 @@
  */
 package org.tools4j.fx.highway.direct;
 
+import java.io.Closeable;
+
 /**
  * A pile of messages of varying byte length. Messages can only be appended or
  * sequentially read.
  */
-public interface Pile {
+public interface Pile extends Closeable {
     Appender appender();
     Sequencer sequencer();
+    void close();
 }

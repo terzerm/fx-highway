@@ -54,7 +54,7 @@ public final class MappedRegion {
         this.size = size;
         this.address = map(fileChannel, position, size);
         if (index == 0 && initialContentSize == 0) {
-            DirectUnsafe.UNSAFE.putLongVolatile(null, 0, -1);
+            DirectUnsafe.UNSAFE.putLongVolatile(null, address, -1);
         }
     }
 
