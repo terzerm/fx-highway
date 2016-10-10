@@ -216,7 +216,7 @@ public class ChronicleQueue4xRawDataLatencyTest {
 
     public static void main(String... args) throws Exception {
         final int messageSize = 100;
-        final int[] messagesPerSecond = { 160000, 500000 };
+        final int[] messagesPerSecond = { 160000, 160000, 500000, 1000000 };
         for (final int mps : messagesPerSecond) {
             final ChronicleQueue4xRawDataLatencyTest chronicleQueueLatencyTest = new ChronicleQueue4xRawDataLatencyTest(mps, messageSize, false);
             chronicleQueueLatencyTest.setup();

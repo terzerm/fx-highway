@@ -13,7 +13,7 @@
             <type name="blockLength" primitiveType="uint8"/>
             <type name="numInGroup" primitiveType="uint8"/>
         </composite>
-        <composite name="messageHeader" description="Message identifiers and length of message root">
+        <composite name="messageHeader" description="Message identifiers and size of message root">
             <type name="blockLength" primitiveType="uint16"/>
             <type name="templateId" primitiveType="uint16"/>
             <type name="schemaId" primitiveType="uint16"/>
@@ -48,7 +48,7 @@
             <validValue name="ALL">6</validValue>
         </enum>
         <type name="Timestamp" primitiveType="int64"/>
-        <type name="Currency" primitiveType="char" length="3" characterEncoding="ASCII"/>
+        <type name="Currency" primitiveType="char" size="3" characterEncoding="ASCII"/>
         <type name="Rate" primitiveType="double"/>
         <type name="Quantity" primitiveType="double"/>
         <set name="Flags" encodingType="uint8">
