@@ -43,7 +43,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 @RunWith(Parameterized.class)
 @Ignore
-public class SingleAppenderPileRawDataLatencyTest {
+public class OneToManyPileRawDataLatencyTest {
 
     private final long messagesPerSecond;
     private final int numberOfBytes;
@@ -64,9 +64,9 @@ public class SingleAppenderPileRawDataLatencyTest {
         });
     }
 
-    public SingleAppenderPileRawDataLatencyTest(final long messagesPerSecond,
-                                                final int numberOfBytes,
-                                                final boolean affinity) {
+    public OneToManyPileRawDataLatencyTest(final long messagesPerSecond,
+                                           final int numberOfBytes,
+                                           final boolean affinity) {
         this.messagesPerSecond = messagesPerSecond;
         this.numberOfBytes = numberOfBytes;
         this.affinity = affinity;
@@ -74,7 +74,7 @@ public class SingleAppenderPileRawDataLatencyTest {
 
     @Before
     public void setup() throws Exception {
-        pile = SingleAppenderPile.createOrReplace(FileUtil.tmpDirFile("pile").getAbsolutePath());
+        pile = OneToManyPile.createOrReplace(FileUtil.tmpDirFile("pile").getAbsolutePath());
         appender = pile.appender();
         sequencer = pile.sequencer();
         //byteWatcher = ByteWatcherPrinter.watch();
@@ -219,7 +219,7 @@ public class SingleAppenderPileRawDataLatencyTest {
     }
 
     public static void main(String... args) throws Exception {
-        final SingleAppenderPileRawDataLatencyTest latencyTest = new SingleAppenderPileRawDataLatencyTest(160000, 94, false);
+        final OneToManyPileRawDataLatencyTest latencyTest = new OneToManyPileRawDataLatencyTest(160000, 94, false);
         latencyTest.setup();
         try {
             latencyTest.latencyTest();

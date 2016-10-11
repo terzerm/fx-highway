@@ -23,8 +23,6 @@
  */
 package org.tools4j.fx.highway.direct;
 
-import java.io.*;
-
 /**
  * Message writer offers methods to write different value types for elements of a message.
  */
@@ -41,17 +39,6 @@ public interface MessageReader {
     char getChar();
     char getCharAscii();
     CharSequence getStringAscii();
-    /**
-     * Reads in a representation of a Unicode character string encoded in
-     * <a href="DataInput.html#modified-utf-8">modified UTF-8</a> format;
-     * this string of characters is then returned as a <code>CharSequence</code>.
-     * The details of the modified UTF-8 representation
-     * are  exactly the same as for the <code>readUTF</code>
-     * method of <code>DataInput</code>.
-     *
-     * @return     a Unicode string.
-     * @see        DataInputStream#readUTF(DataInput)
-     */
     CharSequence getStringUtf8();
     CharSequence getString();
     Sequencer finishReadMessage();

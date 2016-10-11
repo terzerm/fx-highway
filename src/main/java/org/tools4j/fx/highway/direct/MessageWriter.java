@@ -39,22 +39,6 @@ public interface MessageWriter {
     MessageWriter putCharAscii(char value);
     MessageWriter putChar(char value);
     MessageWriter putStringAscii(CharSequence value);
-    /**
-     * Writes a string using
-     * <a href="DataInput.html#modified-utf-8">modified UTF-8</a>
-     * encoding in a machine-independent manner.
-     * <p>
-     * First, two bytes are written to out as if by the <code>writeShort</code>
-     * method giving the number of bytes to follow. This value is the number of
-     * bytes actually written out, not the length of the string. Following the
-     * length, each character of the string is output, in sequence, using the
-     * modified UTF-8 encoding for the character. The number of bytes written
-     * will be at least two plus the length of <code>value</code>, and at most two
-     * plus thrice the length of <code>value</code>.
-     *
-     * @param      value   a string to be written.
-     * @return     This message writer for chained put operations
-     */
     MessageWriter putStringUtf8(CharSequence value);
     MessageWriter putString(CharSequence value);
     Appender finishAppendMessage();

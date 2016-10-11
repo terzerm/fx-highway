@@ -47,15 +47,12 @@ public final class MappedRegion {
     private final AtomicInteger refCount = new AtomicInteger(1);
     private final AtomicBoolean closed = new AtomicBoolean(false);
 
-    public MappedRegion(final FileChannel fileChannel, final int index, final long position, final long size, final long initialContentSize) {
+    public MappedRegion(final FileChannel fileChannel, final int index, final long position, final long size) {
         this.fileChannel = Objects.requireNonNull(fileChannel);
         this.index = index;
         this.position = position;
         this.size = size;
         this.address = map(fileChannel, position, size);
-        if (index == 0 && initialContentSize == 0) {
-            DirectUnsafe.UNSAFE.putLongVolatile(null, address, -1);
-        }
     }
 
     public int getIndex() {

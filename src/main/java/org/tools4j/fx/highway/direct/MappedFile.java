@@ -23,9 +23,9 @@
  */
 package org.tools4j.fx.highway.direct;
 
-import java.io.Closeable;
-import java.io.IOException;
-import java.io.RandomAccessFile;
+import java.io.*;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 
@@ -53,6 +53,11 @@ public class MappedFile implements Closeable {
         }
     }
 
+    public interface FileInitialiser {
+        void init(FileChannel file, Mode mode) throws IOException;
+    }
+
+
     private final RandomAccessFile file;
     private final Mode mode;
     private final long regionSize;
@@ -60,18 +65,43 @@ public class MappedFile implements Closeable {
     private volatile AtomicReferenceArray<MappedRegion> mappedRegions = new AtomicReferenceArray<MappedRegion>(2);
 
     public MappedFile(final String fileName, final Mode mode, final long regionSize) throws IOException {
-        this(new RandomAccessFile(fileName, mode.getRandomAccessMode()), mode, regionSize);
+        this(new File(fileName), mode, regionSize);
     }
 
-    private MappedFile(final RandomAccessFile file, final Mode mode, final long regionSize) throws IOException {
+    public MappedFile(final String fileName, final Mode mode, final long regionSize, final FileInitialiser fileInitialiser) throws IOException {
+        this(new File(fileName), mode, regionSize, fileInitialiser);
+    }
+
+    public MappedFile(final File file, final Mode mode, final long regionSize) throws IOException {
+        this(file, mode, regionSize, MappedFile::initFile);
+    }
+
+    public MappedFile(final File file, final Mode mode, final long regionSize, final FileInitialiser fileInitialiser) throws IOException {
         if (regionSize <= 0 || (regionSize & (REGION_SIZE_MULTIPLE-1)) != 0) {
             throw new IllegalArgumentException("Region size must be positive and a multiple of " + REGION_SIZE_MULTIPLE + " but was " + regionSize);
         }
-        this.file = Objects.requireNonNull(file);
+        if (!file.exists()) {
+            if (mode == Mode.READ_ONLY) {
+                throw new FileNotFoundException(file.getAbsolutePath());
+            }
+            file.createNewFile();
+        }
+        final RandomAccessFile raf = new RandomAccessFile(file, mode.getRandomAccessMode());
+        this.file = Objects.requireNonNull(raf);
         this.mode = Objects.requireNonNull(mode);
         this.regionSize = regionSize;
+        fileInitialiser.init(raf.getChannel(), mode);
+    }
+
+    private static void initFile(final FileChannel fileChannel, final MappedFile.Mode mode) throws IOException {
         if (mode == Mode.READ_WRITE_CLEAR) {
-            file.setLength(0);
+            final FileLock lock = fileChannel.lock();
+            try {
+                fileChannel.truncate(0);
+                fileChannel.force(true);
+            } finally {
+                lock.release();
+            }
         }
     }
 
@@ -127,12 +157,12 @@ public class MappedFile implements Closeable {
         final MappedRegion mr = mappedRegions.get(index);
         if (mr == null || mr.isClosed() || mr.incAndGetRefCount() == 0) {
             final long position = index * regionSize;
-            final long fileLen = getFileLength();
-            final long newFileLen = Math.max(fileLen, position + regionSize);
-            if (newFileLen > fileLen) {
-                setFileLength(newFileLen);
+            final long minLen = position + regionSize;
+            final long curLen = getFileLength();
+            if (curLen < minLen) {
+                setFileLength(minLen);
             }
-            final MappedRegion newRegion = new MappedRegion(file.getChannel(), index, position, regionSize, Math.min(fileLen - position, regionSize));
+            final MappedRegion newRegion = new MappedRegion(file.getChannel(), index, position, regionSize);
             if (mappedRegions.compareAndSet(index, mr, newRegion)) {
                 return newRegion;
             }
@@ -143,8 +173,6 @@ public class MappedFile implements Closeable {
         //region exists and ref count increment was successful
         return mr;
     }
-
-
 
     private void ensureSufficientMappedRegionsCapacity(final int index) {
         if (index < mappedRegions.length()) {
