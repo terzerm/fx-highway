@@ -23,8 +23,6 @@
  */
 package org.tools4j.fx.highway.direct;
 
-import java.util.Objects;
-
 import static org.tools4j.fx.highway.direct.DirectUnsafe.UNSAFE;
 
 /**
@@ -37,7 +35,10 @@ public final class OneToManySequencer implements Sequencer {
     private long messageLen = -1;
 
     public OneToManySequencer(final MappedFile file) {
-        this.file = Objects.requireNonNull(file);
+        if (file.getFileLength() < 8) {
+            throw new IllegalStateException("Not a pile file");
+        }
+        this.file = file;
         this.messageReader = new MessageReaderImpl();
     }
 
@@ -63,7 +64,7 @@ public final class OneToManySequencer implements Sequencer {
 
     private long getMessageLength() {
         if (messageLen < 0) {
-            messageLen = messageReader.readNextMessageLength();
+            messageLen = messageReader.pollNextMessageLength();
         }
         return messageLen;
     }
@@ -78,11 +79,11 @@ public final class OneToManySequencer implements Sequencer {
         private final RollingRegionPointer ptr = new RollingRegionPointer(file);
         private long messageEndPosition = -1;
 
-        private long readNextMessageLength() {
+        private long pollNextMessageLength() {
             if (messageEndPosition >= 0) {
                 finishReadMessage();
             }
-            return UNSAFE.getLongVolatile(null, getAndIncrementAddress(8));
+            return UNSAFE.getLongVolatile(null, ptr.getAddress());
         }
 
         public void close() {
@@ -91,7 +92,8 @@ public final class OneToManySequencer implements Sequencer {
 
         private MessageReader readNextMessage(final long messageLen) {
             if (messageEndPosition < 0) {
-                messageEndPosition = ptr.ensureNotClosed().getRegion().getPosition() + messageLen;
+                ptr.ensureNotClosed().moveBy(8);//skip message length field
+                messageEndPosition = ptr.getPosition() + messageLen;
                 return messageReader;
             }
             //should never get here
@@ -102,6 +104,10 @@ public final class OneToManySequencer implements Sequencer {
         public Sequencer finishReadMessage() {
             if (messageEndPosition >= 0) {
                 ptr.ensureNotClosed().moveToPosition(messageEndPosition);
+                final long rem = ptr.getBytesRemaining();
+                if (rem < 8) {
+                    ptr.moveBy(rem);
+                }
                 messageEndPosition = -1;
                 return OneToManySequencer.this;
             }
@@ -110,7 +116,11 @@ public final class OneToManySequencer implements Sequencer {
 
         @Override
         protected long getAndIncrementAddress(final int add) {
-            return ptr.ensureNotClosed().getAndIncrementAddress(add, false);
+            final long pos = ptr.ensureNotClosed().getPosition();
+            if (pos + add <= messageEndPosition) {
+                return ptr.getAndIncrementAddress(add, false);
+            }
+            throw new IllegalStateException("Attempt to read beyond message end: " + (pos + add) + " > " + messageEndPosition);
         }
     }
 }

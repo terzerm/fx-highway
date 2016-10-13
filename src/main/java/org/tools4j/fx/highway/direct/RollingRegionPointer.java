@@ -51,39 +51,45 @@ public final class RollingRegionPointer implements Closeable {
         return offset;
     }
 
+    public long getBytesRemaining() {
+        return region.getSize() - offset;
+    }
+
+    public long getPosition() {
+        return region.getPosition() + offset;
+    }
+
     public long getAddress() {
         return region.getAddress(offset);
     }
 
     public long getAndIncrementAddress(final long add, final boolean padOnRoll) {
-        final MappedRegion reg = region;
         final long off = offset;
         final long newOffset = off + add;
-        final long regionSize = reg.getSize();
-        if (newOffset < regionSize) {
+        final long regionSize = region.getSize();
+        if (newOffset <= regionSize) {
             offset = newOffset;
-            return reg.getAddress(off);
+            return region.getAddress(off);
         }
-        if (padOnRoll && newOffset > regionSize) {
+        if (padOnRoll) {
             pad(regionSize - off);
         }
         rollRegion();
-        if (newOffset == regionSize) {
-            return reg.getAddress(off);
-        }
         offset += add;
         return region.getAddress();
     }
 
     public void moveBy(final long step) {
-        moveToPosition(region.getPosition() + step);
+        moveToPosition(getPosition() + step);
     }
 
     public void moveToPosition(final long position) {
-        while (position - region.getPosition() >= region.getSize()) {
+        long newOffset = position - region.getPosition();
+        while (newOffset >= region.getSize()) {
             rollRegion();
+            newOffset = position - region.getPosition();
         }
-        offset = position - region.getPosition();
+        offset = newOffset;
     }
 
     private void pad(final long len) {
@@ -93,8 +99,9 @@ public final class RollingRegionPointer implements Closeable {
     }
 
     private void rollRegion() {
-        file.releaseRegion(region);
+        final MappedRegion previousRegion = region;
         region = file.reserveRegion(region.getIndex() + 1);
+        file.releaseRegion(previousRegion);
         offset = 0;
     }
 

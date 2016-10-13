@@ -39,6 +39,8 @@ public final class MappedRegion {
     private static final Method MAP_METHOD = getMethod(FileChannelImpl.class, "map0", int.class, long.class, long.class);
     private static final Method UNMAP_METHOD = getMethod(FileChannelImpl.class, "unmap0", long.class, long.class);
 
+    public static final long REGION_SIZE_GRANULARITY = initRegionSizeGranularity();
+
     private final FileChannel fileChannel;
     private final int index;
     private final long position;
@@ -137,6 +139,14 @@ public final class MappedRegion {
             UNMAP_METHOD.invoke(null, position, length);
         } catch (final Exception e) {
             throw new RuntimeException("Unmapping failed for " + fileChannel + ":" + position + ":" + length, e);
+        }
+    }
+
+    private static long initRegionSizeGranularity() {
+        try {
+            return (Long)getMethod(FileChannelImpl.class, "initIDs").invoke(null);
+        } catch (final Exception e) {
+            throw new RuntimeException(e);
         }
     }
 

@@ -25,7 +25,6 @@ package org.tools4j.fx.highway.direct;
 
 import java.io.*;
 import java.nio.channels.FileChannel;
-import java.nio.channels.FileLock;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 
@@ -33,9 +32,6 @@ import java.util.concurrent.atomic.AtomicReferenceArray;
  * Created by terz on 9/10/2016.
  */
 public class MappedFile implements Closeable {
-
-    //must be power of 2!
-    public static final long REGION_SIZE_MULTIPLE = 8;
 
     public enum Mode {
         READ_ONLY("r"),
@@ -73,12 +69,15 @@ public class MappedFile implements Closeable {
     }
 
     public MappedFile(final File file, final Mode mode, final long regionSize) throws IOException {
-        this(file, mode, regionSize, MappedFile::initFile);
+        this(file, mode, regionSize, (c,m) -> {});
     }
 
     public MappedFile(final File file, final Mode mode, final long regionSize, final FileInitialiser fileInitialiser) throws IOException {
-        if (regionSize <= 0 || (regionSize & (REGION_SIZE_MULTIPLE-1)) != 0) {
-            throw new IllegalArgumentException("Region size must be positive and a multiple of " + REGION_SIZE_MULTIPLE + " but was " + regionSize);
+        if (regionSize <= 0 || (regionSize % MappedRegion.REGION_SIZE_GRANULARITY) != 0) {
+            throw new IllegalArgumentException("Region size must be positive and a multiple of " + MappedRegion.REGION_SIZE_GRANULARITY + " but was " + regionSize);
+        }
+        if (mode == Mode.READ_WRITE_CLEAR && file.exists()) {
+            file.delete();
         }
         if (!file.exists()) {
             if (mode == Mode.READ_ONLY) {
@@ -91,18 +90,6 @@ public class MappedFile implements Closeable {
         this.mode = Objects.requireNonNull(mode);
         this.regionSize = regionSize;
         fileInitialiser.init(raf.getChannel(), mode);
-    }
-
-    private static void initFile(final FileChannel fileChannel, final MappedFile.Mode mode) throws IOException {
-        if (mode == Mode.READ_WRITE_CLEAR) {
-            final FileLock lock = fileChannel.lock();
-            try {
-                fileChannel.truncate(0);
-                fileChannel.force(true);
-            } finally {
-                lock.release();
-            }
-        }
     }
 
     public Mode getMode() {

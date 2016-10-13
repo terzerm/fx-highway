@@ -45,6 +45,8 @@ import java.util.concurrent.atomic.AtomicLong;
 @Ignore
 public class OneToManyPileRawDataLatencyTest {
 
+    private static int ix = 0;
+
     private final long messagesPerSecond;
     private final int numberOfBytes;
     private final boolean affinity;
@@ -74,7 +76,7 @@ public class OneToManyPileRawDataLatencyTest {
 
     @Before
     public void setup() throws Exception {
-        pile = OneToManyPile.createOrReplace(FileUtil.tmpDirFile("pile").getAbsolutePath());
+        pile = OneToManyPile.createOrReplace(FileUtil.tmpDirFile("pile").getAbsolutePath() + (ix++), 16L<<20);
         appender = pile.appender();
         sequencer = pile.sequencer();
         //byteWatcher = ByteWatcherPrinter.watch();
@@ -106,6 +108,8 @@ public class OneToManyPileRawDataLatencyTest {
         final long histogramMax = TimeUnit.SECONDS.toNanos(1);
         final int w = 200000;//warmup
         final int c = 100000;//counted
+//        final int w = 500;//warmup
+//        final int c = 500;//counted
         final int n = w+c;
         final long maxTimeToRunSeconds = 30;
 
@@ -124,47 +128,54 @@ public class OneToManyPileRawDataLatencyTest {
 
         //when
         final Thread subscriberThread = new AffinityThread(affinity, () -> {
-            final AtomicLong t0 = new AtomicLong();
-            final AtomicLong t1 = new AtomicLong();
-            final AtomicLong t2 = new AtomicLong();
-            pubSubReadyLatch.countDown();
-            while (!terminate.get()) {
-                if (sequencer.hasNextMessage()) {
-                    final MessageReader reader = sequencer.readNextMessage();
-                    if (count.get() == 0) t0.set(clock.nanoTime());
-                    else if (count.get() == w-1) t1.set(clock.nanoTime());
-                    else if (count.get() == n-1) t2.set(clock.nanoTime());
-                    long sendTime = reader.getInt64();
-                    for (int i = 8; i < numberOfBytes; ) {
-                        if (i + 8 <= numberOfBytes) {
-                            reader.getInt64();
-                            i += 8;
-                        } else {
-                            reader.getInt8();
-                            i++;
+            try {
+                final AtomicLong t0 = new AtomicLong();
+                final AtomicLong t1 = new AtomicLong();
+                final AtomicLong t2 = new AtomicLong();
+                pubSubReadyLatch.countDown();
+                while (!terminate.get()) {
+                    if (sequencer.hasNextMessage()) {
+                        final MessageReader reader = sequencer.readNextMessage();
+                        if (count.get() == 0) t0.set(clock.nanoTime());
+                        else if (count.get() == w - 1) t1.set(clock.nanoTime());
+                        else if (count.get() == n - 1) t2.set(clock.nanoTime());
+                        long sendTime = reader.getInt64();
+                        for (int i = 8; i < numberOfBytes; ) {
+                            if (i + 8 <= numberOfBytes) {
+                                reader.getInt64();
+                                i += 8;
+                            } else {
+                                reader.getInt8();
+                                i++;
+                            }
                         }
-                    }
-                    reader.finishReadMessage();
-                    final long time = clock.nanoTime();
-                    final int cnt = count.incrementAndGet();
-                    if (cnt <= n) {
-                        if (time - sendTime > histogramMax) {
-                            //throw new RuntimeException("bad data in message " + cnt + ": time=" + time + ", sendTime=" + sendTime + ", dt=" + (time - sendTime));
-                            histogram.recordValue(histogramMax);
-                        } else {
-                            histogram.recordValue(time - sendTime);
+                        reader.finishReadMessage();
+                        final long time = clock.nanoTime();
+                        final int cnt = count.incrementAndGet();
+                        if (cnt <= n) {
+                            if (time - sendTime > histogramMax) {
+                                //throw new RuntimeException("bad data in message " + cnt + ": time=" + time + ", sendTime=" + sendTime + ", dt=" + (time - sendTime));
+                                histogram.recordValue(histogramMax);
+                            } else {
+                                histogram.recordValue(time - sendTime);
+                            }
                         }
-                    }
-                    if (cnt == w) {
-                        histogram.reset();
-                    }
-                    if (count.get() >= n) {
-                        receivedAllLatch.countDown();
-                        break;
+                        if (cnt == w) {
+                            histogram.reset();
+                        }
+                        if (count.get() >= n) {
+                            receivedAllLatch.countDown();
+                            break;
+                        }
                     }
                 }
+                final int cnt = count.get();
+                System.out.println((t2.get() - t0.get())/1000f + " us total receiving time (" + cnt + " messages, " + (t2.get() - t1.get())/(1000f*cnt) + " us/message, " + cnt/((t2.get()-t1.get())/1000000000f) + " messages/second)");
+            } catch (final Throwable t) {
+                t.printStackTrace();
+                System.err.println("failed after receiving " + count + " messages");
+                receivedAllLatch.countDown();
             }
-            System.out.println((t2.get() - t0.get())/1000.0 + " us total receiving time (" + (t2.get() - t1.get())/(1000f*c) + " us/message, " + c/((t2.get()-t1.get())/1000000000f) + " messages/second)");
         });
         subscriberThread.setName("subscriber-thread");
         subscriberThread.start();
@@ -174,8 +185,6 @@ public class OneToManyPileRawDataLatencyTest {
             final long periodNs = 1000000000/messagesPerSecond;
             pubSubReadyLatch.countDown();
             pubSubReadyLatch.awaitThrowOnTimeout(5, TimeUnit.SECONDS);
-            long cntAdmin = 0;
-            long cntBackp = 0;
             long cnt = 0;
             final long t0 = clock.nanoTime();
             while (cnt < n && !terminate.get()) {
@@ -199,7 +208,7 @@ public class OneToManyPileRawDataLatencyTest {
                 cnt++;
             }
             final long t1 = clock.nanoTime();
-            System.out.println((t1 - t0) / 1000.0 + " us total publishing time (backp=" + cntBackp + ", admin=" + cntAdmin + ", cnt=" + cnt + ")");
+            System.out.println((t1 - t0) / 1000f + " us total publishing time (cnt=" + cnt + ", " + (t1 - t0)/(1000f * cnt) + " us/message, " + (cnt * 1000000000f) / (t1 - t0) + " messages/second)");
         });
         publisherThread.setName("publisher-thread");
         publisherThread.start();;
@@ -219,12 +228,17 @@ public class OneToManyPileRawDataLatencyTest {
     }
 
     public static void main(String... args) throws Exception {
-        final OneToManyPileRawDataLatencyTest latencyTest = new OneToManyPileRawDataLatencyTest(160000, 94, false);
-        latencyTest.setup();
-        try {
-            latencyTest.latencyTest();
-        } finally {
-            latencyTest.tearDown();
+        final int byteLen = 94;
+//        final int[] messagesPerSec = {160000, 500000};
+        final int[] messagesPerSec = {160000};
+        for (final int mps : messagesPerSec) {
+            final OneToManyPileRawDataLatencyTest latencyTest = new OneToManyPileRawDataLatencyTest(mps, byteLen, false);
+            latencyTest.setup();
+            try {
+                latencyTest.latencyTest();
+            } finally {
+                latencyTest.tearDown();
+            }
         }
     }
 }

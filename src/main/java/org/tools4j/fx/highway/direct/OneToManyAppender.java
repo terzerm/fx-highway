@@ -56,7 +56,6 @@ public final class OneToManyAppender implements Appender {
 
         private MappedRegion startRegion;
         private long startOffset;
-        private long length;
 
         public MessageWriterImpl() {
             skipExistingMessages();
@@ -64,7 +63,7 @@ public final class OneToManyAppender implements Appender {
 
         private void skipExistingMessages() {
             long messageLen;
-            while ((messageLen = UNSAFE.getLongVolatile(null, ptr.getAddress())) >= 0) {
+            while ((messageLen = UNSAFE.getLong(null, ptr.getAddress())) >= 0) {
                 ptr.moveBy(8 + messageLen);
             }
         }
@@ -83,6 +82,7 @@ public final class OneToManyAppender implements Appender {
             }
             startRegion = ptr.ensureNotClosed().getRegion();
             startOffset = ptr.getOffset();
+            startRegion.incAndGetRefCount();
             ptr.moveBy(8);
             return this;
         }
@@ -99,13 +99,13 @@ public final class OneToManyAppender implements Appender {
         }
 
         private void writeMessageLength() {
-            UNSAFE.putOrderedLong(null, startRegion.getAddress(startOffset), length);
-            if (startRegion != ptr.getRegion()) {
-                file.releaseRegion(startRegion);
-            }
+            final long startAddr = startRegion.getAddress(startOffset);
+            final long startPos = startRegion.getPosition() + startOffset;
+            final long length = ptr.getPosition() - startPos - 8;
+            UNSAFE.putOrderedLong(null, startAddr, length);
+            file.releaseRegion(startRegion);
             startRegion = null;
             startOffset = -1;
-            length = -1;
         }
 
         private void padMessageAndWriteNextLength() {
@@ -115,13 +115,12 @@ public final class OneToManyAppender implements Appender {
 
         //POSTCONDITION: guaranteed that we can write a 8 byte msg len after padding
         private void padMessageEnd() {
-            final long rem = ptr.getRegion().getSize() - ptr.getOffset();
-            final long pad = 8 - (int) (ptr.getRegion().getPosition() & 0x7);
-            if ((pad < 8) | (rem < 8)) {
-                final long len = (rem < 8) | (rem < pad + 8) ? rem : pad;
-                if (len > 0) {
-                    UNSAFE.setMemory(null, ptr.getAndIncrementAddress(len, false), len, (byte) 0);
-                }
+            final long pad = 8 - (int) (ptr.getPosition() & 0x7);
+            if (pad < 8) {
+                UNSAFE.setMemory(null, ptr.getAndIncrementAddress(pad, false), pad, (byte) 0);
+            }
+            if (ptr.getBytesRemaining() < 8) {
+                ptr.getAndIncrementAddress(8, true);
             }
         }
 
