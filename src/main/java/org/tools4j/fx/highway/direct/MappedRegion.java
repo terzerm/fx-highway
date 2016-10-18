@@ -112,6 +112,10 @@ public final class MappedRegion {
         return rc > 0 ? rc : 0;
     }
 
+    int decAndGetRefCountButDontClose() {
+        return refCount.decrementAndGet();
+    }
+
     private void close() {
         if (closed.compareAndSet(false, true)) {
             unmap(fileChannel, address, size);

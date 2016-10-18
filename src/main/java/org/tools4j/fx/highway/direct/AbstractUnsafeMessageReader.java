@@ -23,7 +23,7 @@
  */
 package org.tools4j.fx.highway.direct;
 
-import static org.tools4j.fx.highway.direct.DirectUnsafe.UNSAFE;
+import static org.tools4j.fx.highway.direct.UnsafeAccess.UNSAFE;
 
 abstract public class AbstractUnsafeMessageReader extends AbstractMessageReader {
 

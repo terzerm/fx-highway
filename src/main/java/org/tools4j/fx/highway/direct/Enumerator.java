@@ -26,11 +26,11 @@ package org.tools4j.fx.highway.direct;
 import java.io.Closeable;
 
 /**
- * Appends messages to a {@link Pile}.
+ * Appends messages to a {@link MappedQueue}.
  */
-public interface Sequencer extends Closeable {
+public interface Enumerator extends Closeable {
     boolean hasNextMessage();
     MessageReader readNextMessage();
-    Sequencer skipNextMessage();
+    Enumerator skipNextMessage();
     void close();
 }

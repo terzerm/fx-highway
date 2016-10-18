@@ -43,7 +43,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 @RunWith(Parameterized.class)
 @Ignore
-public class OneToManyPileRawDataLatencyTest {
+public class OneToManyMappedQueueRawDataLatencyTest {
 
     private static int ix = 0;
 
@@ -51,9 +51,9 @@ public class OneToManyPileRawDataLatencyTest {
     private final int numberOfBytes;
     private final boolean affinity;
 
-    private Pile pile;
+    private MappedQueue queue;
     private Appender appender;
-    private Sequencer sequencer;
+    private Enumerator enumerator;
     private ByteWatcher byteWatcher;
 
     @Parameterized.Parameters(name = "{index}: MPS={0}, NBYTES={1}, AFFINITY={2}")
@@ -66,9 +66,9 @@ public class OneToManyPileRawDataLatencyTest {
         });
     }
 
-    public OneToManyPileRawDataLatencyTest(final long messagesPerSecond,
-                                           final int numberOfBytes,
-                                           final boolean affinity) {
+    public OneToManyMappedQueueRawDataLatencyTest(final long messagesPerSecond,
+                                                  final int numberOfBytes,
+                                                  final boolean affinity) {
         this.messagesPerSecond = messagesPerSecond;
         this.numberOfBytes = numberOfBytes;
         this.affinity = affinity;
@@ -76,9 +76,10 @@ public class OneToManyPileRawDataLatencyTest {
 
     @Before
     public void setup() throws Exception {
-        pile = OneToManyPile.createOrReplace(FileUtil.tmpDirFile("pile").getAbsolutePath() + (ix++), 16L<<20);
-        appender = pile.appender();
-        sequencer = pile.sequencer();
+        queue = OneToManyDirectQueue.createOrReplace(FileUtil.tmpDirFile("queue").getAbsolutePath() + (ix++), 1L<<12);
+        //queue = OneToManyIndexedQueue.createOrReplace(FileUtil.tmpDirFile("queue").getAbsolutePath() + (ix++), 1L<<12, 1L<<12);
+        appender = queue.appender();
+        enumerator = queue.enumerator();
         //byteWatcher = ByteWatcherPrinter.watch();
     }
 
@@ -88,13 +89,13 @@ public class OneToManyPileRawDataLatencyTest {
             appender.close();
             appender = null;
         }
-        if (sequencer != null) {
-            sequencer.close();
-            sequencer = null;
+        if (enumerator != null) {
+            enumerator.close();
+            enumerator = null;
         }
-        if (pile != null) {
-            pile.close();
-            pile = null;
+        if (queue != null) {
+            queue.close();
+            queue = null;
         }
         if (byteWatcher != null) {
             byteWatcher.shutdown();
@@ -134,8 +135,8 @@ public class OneToManyPileRawDataLatencyTest {
                 final AtomicLong t2 = new AtomicLong();
                 pubSubReadyLatch.countDown();
                 while (!terminate.get()) {
-                    if (sequencer.hasNextMessage()) {
-                        final MessageReader reader = sequencer.readNextMessage();
+                    if (enumerator.hasNextMessage()) {
+                        final MessageReader reader = enumerator.readNextMessage();
                         if (count.get() == 0) t0.set(clock.nanoTime());
                         else if (count.get() == w - 1) t1.set(clock.nanoTime());
                         else if (count.get() == n - 1) t2.set(clock.nanoTime());
@@ -170,7 +171,7 @@ public class OneToManyPileRawDataLatencyTest {
                     }
                 }
                 final int cnt = count.get();
-                System.out.println((t2.get() - t0.get())/1000f + " us total receiving time (" + cnt + " messages, " + (t2.get() - t1.get())/(1000f*cnt) + " us/message, " + cnt/((t2.get()-t1.get())/1000000000f) + " messages/second)");
+                System.out.println((t2.get() - t0.get())/1000f + " us total receiving time (" + cnt + " messages, " + (t2.get() - t0.get())/(1000f*cnt) + " us/message, " + cnt/((t2.get()-t0.get())/1000000000f) + " messages/second)");
             } catch (final Throwable t) {
                 t.printStackTrace();
                 System.err.println("failed after receiving " + count + " messages");
@@ -232,7 +233,7 @@ public class OneToManyPileRawDataLatencyTest {
 //        final int[] messagesPerSec = {160000, 500000};
         final int[] messagesPerSec = {160000};
         for (final int mps : messagesPerSec) {
-            final OneToManyPileRawDataLatencyTest latencyTest = new OneToManyPileRawDataLatencyTest(mps, byteLen, false);
+            final OneToManyMappedQueueRawDataLatencyTest latencyTest = new OneToManyMappedQueueRawDataLatencyTest(mps, byteLen, false);
             latencyTest.setup();
             try {
                 latencyTest.latencyTest();

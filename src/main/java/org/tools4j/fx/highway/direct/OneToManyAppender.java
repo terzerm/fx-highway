@@ -25,10 +25,10 @@ package org.tools4j.fx.highway.direct;
 
 import java.util.Objects;
 
-import static org.tools4j.fx.highway.direct.DirectUnsafe.UNSAFE;
+import static org.tools4j.fx.highway.direct.UnsafeAccess.UNSAFE;
 
 /**
- * The single appender of a {@link OneToManyPile}.
+ * The single appender of a {@link OneToManyDirectQueue}.
  */
 public final class OneToManyAppender implements Appender {
 
@@ -71,7 +71,7 @@ public final class OneToManyAppender implements Appender {
         @Override
         protected long getAndIncrementAddress(final int add) {
             if (startRegion == null) {
-                throw new IllegalStateException("Message already finished");
+                throw new IllegalStateException("Message not started");
             }
             return ptr.ensureNotClosed().getAndIncrementAddress(add, true);
         }

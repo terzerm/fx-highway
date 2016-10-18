@@ -28,9 +28,6 @@ import java.nio.channels.FileChannel;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 
-/**
- * Created by terz on 9/10/2016.
- */
 public class MappedFile implements Closeable {
 
     public enum Mode {
@@ -52,7 +49,6 @@ public class MappedFile implements Closeable {
     public interface FileInitialiser {
         void init(FileChannel file, Mode mode) throws IOException;
     }
-
 
     private final RandomAccessFile file;
     private final Mode mode;
@@ -125,8 +121,12 @@ public class MappedFile implements Closeable {
 
     public void releaseRegion(final MappedRegion mappedRegion) {
         ensureNotClosed();
+        releaseRegionInternal(mappedRegions, mappedRegion);
+    }
+    public void releaseRegionInternal(final AtomicReferenceArray<MappedRegion> mappedRegions,
+                                      final MappedRegion mappedRegion) {
         if (0 == mappedRegion.decAndGetRefCount()) {
-            final long index = mappedRegion.getPosition() / regionSize;
+            final long index = mappedRegion.getIndex();
             if (index < mappedRegions.length()) {
                 final int ix = (int) index;
                 final MappedRegion mr = mappedRegions.get(ix);
@@ -214,10 +214,17 @@ public class MappedFile implements Closeable {
                 final MappedRegion mr = arr.get(i);
                 if (mr != null) {
                     if (!mr.isClosed()) {
-                        throw new IllegalStateException("Not all mapped regions are closed, close appender and all sequencers first");
+                        //could be a prepared region without ref count
+                        if (mr.incAndGetRefCount() > 0) {
+                            releaseRegionInternal(arr, mr);
+                        }
+                        //if still not closed, then we give up
+                        if (!mr.isClosed()) {
+                            throw new IllegalStateException("Not all mapped regions are closed, close appender and all enumerators first");
+                        }
                     }
-                    if (!arr.compareAndSet(i, mr, null)) {
-                        throw new IllegalStateException("Appender or sequencers seem still active, close appender and all sequencers first");
+                    if (!arr.compareAndSet(i, mr, null) && arr.get(i) != null) {
+                        throw new IllegalStateException("Appender or enumerators seem still active, close appender and all enumerators first");
                     }
                 }
             }
@@ -227,6 +234,5 @@ public class MappedFile implements Closeable {
             throw new RuntimeException(e);
         }
     }
-
 
 }

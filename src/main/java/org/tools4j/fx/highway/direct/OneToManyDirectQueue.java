@@ -31,9 +31,9 @@ import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Pile implementation optimised for single Appender and multiple Sequencer support.
+ * MappedQueue implementation optimised for single Appender and multiple Enumerator support.
  */
-public class OneToManyPile implements Pile {
+public class OneToManyDirectQueue implements MappedQueue {
 
     public static final long DEFAULT_REGION_SIZE = 4L << 20;//4 MB
     private static final ByteBuffer BUF_INIT_FILE = ByteBuffer.wrap(new byte[] {-1, -1, -1, -1, -1, -1, -1, -1});
@@ -42,36 +42,36 @@ public class OneToManyPile implements Pile {
     private final AtomicBoolean appenderCreated = new AtomicBoolean(false);
     private final AtomicBoolean closed = new AtomicBoolean(false);
 
-    private OneToManyPile(final MappedFile file) {
+    private OneToManyDirectQueue(final MappedFile file) {
         this.file = Objects.requireNonNull(file);
     }
 
-    public static final Pile createOrReplace(final String fileName) throws IOException {
+    public static final MappedQueue createOrReplace(final String fileName) throws IOException {
         return createOrReplace(fileName, DEFAULT_REGION_SIZE);
     }
 
-    public static final Pile createOrReplace(final String fileName, final long regionSize) throws IOException {
-        return open(new MappedFile(fileName, MappedFile.Mode.READ_WRITE_CLEAR, regionSize, OneToManyPile::initFile));
+    public static final MappedQueue createOrReplace(final String fileName, final long regionSize) throws IOException {
+        return open(new MappedFile(fileName, MappedFile.Mode.READ_WRITE_CLEAR, regionSize, OneToManyDirectQueue::initFile));
     }
 
-    public static final Pile createOrAppend(final String fileName) throws IOException {
+    public static final MappedQueue createOrAppend(final String fileName) throws IOException {
         return createOrAppend(fileName, DEFAULT_REGION_SIZE);
     }
 
-    public static final Pile createOrAppend(final String fileName, final long regionSize) throws IOException {
-        return open(new MappedFile(fileName, MappedFile.Mode.READ_WRITE, regionSize, OneToManyPile::initFile));
+    public static final MappedQueue createOrAppend(final String fileName, final long regionSize) throws IOException {
+        return open(new MappedFile(fileName, MappedFile.Mode.READ_WRITE, regionSize, OneToManyDirectQueue::initFile));
     }
 
-    public static final Pile openReadOnly(final String fileName) throws IOException {
+    public static final MappedQueue openReadOnly(final String fileName) throws IOException {
         return openReadOnly(fileName, DEFAULT_REGION_SIZE);
     }
 
-    public static final Pile openReadOnly(final String fileName, final long regionSize) throws IOException {
+    public static final MappedQueue openReadOnly(final String fileName, final long regionSize) throws IOException {
         return open(new MappedFile(fileName, MappedFile.Mode.READ_ONLY, regionSize));
     }
 
-    public static final Pile open(final MappedFile file) {
-        return new OneToManyPile(file);
+    public static final MappedQueue open(final MappedFile file) {
+        return new OneToManyDirectQueue(file);
     }
 
     private static void initFile(final FileChannel fileChannel, final MappedFile.Mode mode) throws IOException {
@@ -113,8 +113,8 @@ public class OneToManyPile implements Pile {
     }
 
     @Override
-    public Sequencer sequencer() {
-        return new OneToManySequencer(file);
+    public Enumerator enumerator() {
+        return new OneToManyEnumerator(file);
     }
 
     @Override

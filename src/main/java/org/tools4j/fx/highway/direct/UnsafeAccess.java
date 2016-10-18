@@ -23,14 +23,24 @@
  */
 package org.tools4j.fx.highway.direct;
 
-import java.io.Closeable;
+import sun.misc.Unsafe;
+
+import java.lang.reflect.Field;
 
 /**
- * A pile of messages of varying byte length. Messages can only be appended or
- * sequentially read.
+ * Access to {@link Unsafe}.
  */
-public interface Pile extends Closeable {
-    Appender appender();
-    Sequencer sequencer();
-    void close();
+public class UnsafeAccess {
+
+    public static final Unsafe UNSAFE = initUnsafe();
+
+    private static final Unsafe initUnsafe() {
+        try {
+            final Field e = Unsafe.class.getDeclaredField("theUnsafe");
+            e.setAccessible(true);
+            return (Unsafe)e.get(null);
+        } catch (Exception e) {
+            throw new RuntimeException("Cannot initialise UNSAFE, e=" + e, e);
+        }
+    }
 }

@@ -41,5 +41,5 @@ public interface MessageReader {
     CharSequence getStringAscii();
     CharSequence getStringUtf8();
     CharSequence getString();
-    Sequencer finishReadMessage();
+    Enumerator finishReadMessage();
 }

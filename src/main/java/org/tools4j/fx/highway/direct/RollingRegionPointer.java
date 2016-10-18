@@ -25,7 +25,7 @@ package org.tools4j.fx.highway.direct;
 
 import java.io.Closeable;
 
-import static org.tools4j.fx.highway.direct.DirectUnsafe.UNSAFE;
+import static org.tools4j.fx.highway.direct.UnsafeAccess.UNSAFE;
 
 /**
  * Points to a position in a {@link MappedRegion} and automatically
