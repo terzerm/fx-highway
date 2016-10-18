@@ -26,7 +26,7 @@ package org.tools4j.fx.highway.direct;
 import static org.tools4j.fx.highway.direct.UnsafeAccess.UNSAFE;
 
 /**
- * Enumerator of a {@link OneToManyDirectQueue}.
+ * Enumerator of a {@link OneToManyQueue}.
  */
 public final class OneToManyEnumerator implements Enumerator {
 

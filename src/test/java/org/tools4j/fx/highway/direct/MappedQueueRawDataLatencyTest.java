@@ -27,7 +27,6 @@ import org.HdrHistogram.Histogram;
 import org.agrona.concurrent.NanoClock;
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -42,8 +41,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 @RunWith(Parameterized.class)
-@Ignore
-public class OneToManyMappedQueueRawDataLatencyTest {
+public class MappedQueueRawDataLatencyTest {
 
     private final long messagesPerSecond;
     private final int numberOfBytes;
@@ -64,9 +62,9 @@ public class OneToManyMappedQueueRawDataLatencyTest {
         });
     }
 
-    public OneToManyMappedQueueRawDataLatencyTest(final long messagesPerSecond,
-                                                  final int numberOfBytes,
-                                                  final boolean affinity) {
+    public MappedQueueRawDataLatencyTest(final long messagesPerSecond,
+                                         final int numberOfBytes,
+                                         final boolean affinity) {
         this.messagesPerSecond = messagesPerSecond;
         this.numberOfBytes = numberOfBytes;
         this.affinity = affinity;
@@ -74,9 +72,9 @@ public class OneToManyMappedQueueRawDataLatencyTest {
 
     @Before
     public void setup() throws Exception {
-//        queue = OneToManyDirectQueue.createOrReplace(FileUtil.tmpDirFile("queue").getAbsolutePath());
+//        queue = OneToManyQueue.createOrReplace(FileUtil.tmpDirFile("queue").getAbsolutePath());
 //        queue = OneToManyIndexedQueue.createOrReplace(FileUtil.tmpDirFile("queue").getAbsolutePath());
-//        queue = OneToManyDirectQueue.createOrReplace(FileUtil.tmpDirFile("queue").getAbsolutePath(), 1L<<12);
+//        queue = OneToManyQueue.createOrReplace(FileUtil.tmpDirFile("queue").getAbsolutePath(), 1L<<12);
         queue = OneToManyIndexedQueue.createOrReplace(FileUtil.tmpDirFile("queue").getAbsolutePath(), 1L<<12, 1L<<12);
         appender = queue.appender();
         enumerator = queue.enumerator();
@@ -233,7 +231,7 @@ public class OneToManyMappedQueueRawDataLatencyTest {
         final int[] messagesPerSec = {160000, 500000};
 //        final int[] messagesPerSec = {160000};
         for (final int mps : messagesPerSec) {
-            final OneToManyMappedQueueRawDataLatencyTest latencyTest = new OneToManyMappedQueueRawDataLatencyTest(mps, byteLen, false);
+            final MappedQueueRawDataLatencyTest latencyTest = new MappedQueueRawDataLatencyTest(mps, byteLen, false);
             latencyTest.setup();
             try {
                 latencyTest.latencyTest();

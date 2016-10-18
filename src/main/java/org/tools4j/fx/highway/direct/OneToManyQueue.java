@@ -32,7 +32,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * MappedQueue implementation optimised for single Appender and multiple Enumerator support.
  */
-public class OneToManyDirectQueue implements MappedQueue {
+public class OneToManyQueue implements MappedQueue {
 
     public static final long DEFAULT_REGION_SIZE = 4L << 20;//4 MB
 
@@ -40,7 +40,7 @@ public class OneToManyDirectQueue implements MappedQueue {
     private final AtomicBoolean appenderCreated = new AtomicBoolean(false);
     private final AtomicBoolean closed = new AtomicBoolean(false);
 
-    private OneToManyDirectQueue(final MappedFile file) {
+    private OneToManyQueue(final MappedFile file) {
         this.file = Objects.requireNonNull(file);
     }
 
@@ -49,7 +49,7 @@ public class OneToManyDirectQueue implements MappedQueue {
     }
 
     public static final MappedQueue createOrReplace(final String fileName, final long regionSize) throws IOException {
-        return open(new MappedFile(fileName, MappedFile.Mode.READ_WRITE_CLEAR, regionSize, OneToManyDirectQueue::initFile));
+        return open(new MappedFile(fileName, MappedFile.Mode.READ_WRITE_CLEAR, regionSize, OneToManyQueue::initFile));
     }
 
     public static final MappedQueue createOrAppend(final String fileName) throws IOException {
@@ -57,7 +57,7 @@ public class OneToManyDirectQueue implements MappedQueue {
     }
 
     public static final MappedQueue createOrAppend(final String fileName, final long regionSize) throws IOException {
-        return open(new MappedFile(fileName, MappedFile.Mode.READ_WRITE, regionSize, OneToManyDirectQueue::initFile));
+        return open(new MappedFile(fileName, MappedFile.Mode.READ_WRITE, regionSize, OneToManyQueue::initFile));
     }
 
     public static final MappedQueue openReadOnly(final String fileName) throws IOException {
@@ -69,7 +69,7 @@ public class OneToManyDirectQueue implements MappedQueue {
     }
 
     public static final MappedQueue open(final MappedFile file) {
-        return new OneToManyDirectQueue(file);
+        return new OneToManyQueue(file);
     }
 
     private static void initFile(final FileChannel fileChannel, final MappedFile.Mode mode) throws IOException {

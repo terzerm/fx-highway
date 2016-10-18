@@ -28,7 +28,7 @@ import java.util.Objects;
 import static org.tools4j.fx.highway.direct.UnsafeAccess.UNSAFE;
 
 /**
- * The single appender of a {@link OneToManyDirectQueue}.
+ * The single appender of a {@link OneToManyQueue}.
  */
 public final class OneToManyAppender implements Appender {
 
