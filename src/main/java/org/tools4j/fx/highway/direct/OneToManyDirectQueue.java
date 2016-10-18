@@ -24,7 +24,6 @@
 package org.tools4j.fx.highway.direct;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
 import java.util.Objects;
@@ -36,7 +35,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class OneToManyDirectQueue implements MappedQueue {
 
     public static final long DEFAULT_REGION_SIZE = 4L << 20;//4 MB
-    private static final ByteBuffer BUF_INIT_FILE = ByteBuffer.wrap(new byte[] {-1, -1, -1, -1, -1, -1, -1, -1});
 
     private final MappedFile file;
     private final AtomicBoolean appenderCreated = new AtomicBoolean(false);
@@ -90,7 +88,7 @@ public class OneToManyDirectQueue implements MappedQueue {
                     //else: FALL THROUGH
                 case READ_WRITE_CLEAR:
                     fileChannel.truncate(0);
-                    fileChannel.write(BUF_INIT_FILE);
+                    fileChannel.transferFrom(InitialBytes.MINUS_ONE, 0, 8);
                     fileChannel.force(true);
                     break;
                 default:

@@ -45,8 +45,6 @@ import java.util.concurrent.atomic.AtomicLong;
 @Ignore
 public class OneToManyMappedQueueRawDataLatencyTest {
 
-    private static int ix = 0;
-
     private final long messagesPerSecond;
     private final int numberOfBytes;
     private final boolean affinity;
@@ -76,8 +74,10 @@ public class OneToManyMappedQueueRawDataLatencyTest {
 
     @Before
     public void setup() throws Exception {
-        queue = OneToManyDirectQueue.createOrReplace(FileUtil.tmpDirFile("queue").getAbsolutePath() + (ix++), 1L<<12);
-        //queue = OneToManyIndexedQueue.createOrReplace(FileUtil.tmpDirFile("queue").getAbsolutePath() + (ix++), 1L<<12, 1L<<12);
+//        queue = OneToManyDirectQueue.createOrReplace(FileUtil.tmpDirFile("queue").getAbsolutePath());
+//        queue = OneToManyIndexedQueue.createOrReplace(FileUtil.tmpDirFile("queue").getAbsolutePath());
+//        queue = OneToManyDirectQueue.createOrReplace(FileUtil.tmpDirFile("queue").getAbsolutePath(), 1L<<12);
+        queue = OneToManyIndexedQueue.createOrReplace(FileUtil.tmpDirFile("queue").getAbsolutePath(), 1L<<12, 1L<<12);
         appender = queue.appender();
         enumerator = queue.enumerator();
         //byteWatcher = ByteWatcherPrinter.watch();
@@ -230,8 +230,8 @@ public class OneToManyMappedQueueRawDataLatencyTest {
 
     public static void main(String... args) throws Exception {
         final int byteLen = 94;
-//        final int[] messagesPerSec = {160000, 500000};
-        final int[] messagesPerSec = {160000};
+        final int[] messagesPerSec = {160000, 500000};
+//        final int[] messagesPerSec = {160000};
         for (final int mps : messagesPerSec) {
             final OneToManyMappedQueueRawDataLatencyTest latencyTest = new OneToManyMappedQueueRawDataLatencyTest(mps, byteLen, false);
             latencyTest.setup();

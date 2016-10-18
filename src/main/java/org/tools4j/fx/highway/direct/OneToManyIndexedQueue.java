@@ -97,7 +97,7 @@ public class OneToManyIndexedQueue implements MappedQueue {
                     //else: FALL THROUGH
                 case READ_WRITE_CLEAR:
                     fileChannel.truncate(0);
-                    fileChannel.write(BUF_INIT_FILE);
+                    fileChannel.transferFrom(InitialBytes.MINUS_ONE, 0, 8);
                     fileChannel.force(true);
                     break;
                 default:
